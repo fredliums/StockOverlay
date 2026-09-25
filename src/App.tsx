@@ -25,8 +25,18 @@ type ShortcutStatus = {
   visibilityError: string | null;
 };
 
+type SettingsTab = 'watchlist' | 'display' | 'appearance' | 'shortcuts' | 'quotes';
+const settingsTabs: { id: SettingsTab; label: string }[] = [
+  { id: 'watchlist', label: '自选股' },
+  { id: 'display', label: '显示' },
+  { id: 'appearance', label: '外观' },
+  { id: 'shortcuts', label: '快捷键' },
+  { id: 'quotes', label: '行情' },
+];
+
 function SettingsShell() {
   const { config, snapshot, error } = useAppState();
+  const [tab, setTab] = useState<SettingsTab>('watchlist');
   const [shortcuts, setShortcuts] = useState<ShortcutStatus | null>(null);
   useEffect(() => {
     let active = true;
@@ -39,6 +49,17 @@ function SettingsShell() {
     <main className="settings-shell">
       <h1>StockOverlay 设置</h1>
       {config && snapshot && <p>{config.stocks.length} 只自选股 · {snapshot.quotes.length} 条行情</p>}
+      <nav className="settings-shell__nav" aria-label="设置分类">
+        {settingsTabs.map((item) => <button
+          key={item.id}
+          type="button"
+          aria-current={tab === item.id ? 'page' : undefined}
+          onClick={() => setTab(item.id)}
+        >{item.label}</button>)}
+      </nav>
+      <section className="settings-shell__content" aria-label={`${settingsTabs.find((item) => item.id === tab)?.label}设置`}>
+        {config ? <p>{tab === 'watchlist' ? '在这里搜索和管理自选股。' : '设置项加载中。'}</p> : <p>正在加载配置…</p>}
+      </section>
       {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
       {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}
       {error && <p role="alert">{error}</p>}
@@ -86,6 +107,11 @@ function OverlayApp() {
           <span className="overlay__drag-icon" aria-hidden="true">⠿</span>
           <span className="overlay__title">StockOverlay</span>
         </div>
+        <button className="overlay__settings" type="button" onClick={() => {
+          invoke('open_settings').catch((reason: unknown) => {
+            setWindowError(`打开设置失败：${errorMessage(reason)}`);
+          });
+        }}>设置</button>
         <span className="overlay__mode">编辑</span>
       </header>}
       <div className="overlay__status">{status}</div>

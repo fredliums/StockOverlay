@@ -33,6 +33,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 .overlay__drag-icon { font-size: .9em; color: rgb(156 171 189 / var(--text-opacity)); }
 .overlay__title { font-size: .9em; font-weight: 700; }
 .overlay__mode { font-size: .65em; color: rgb(156 171 189 / var(--text-opacity)); }
+.overlay__settings { margin-right: 10px; border: 0; background: transparent; color: inherit; font: inherit; font-size: .65em; cursor: pointer; }
+.overlay__settings:hover { text-decoration: underline; }
 .overlay__status { margin-top: 12px; font-size: .75em; color: rgb(183 194 210 / var(--text-opacity)); }
 .overlay__error { margin-top: 8px; font-size: .7em; color: rgb(255 180 168 / var(--text-opacity)); }
 .overlay__resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
@@ -60,3 +62,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 
 .settings-shell { min-height: 100%; padding: 24px; background: #111b2b; }
 .settings-shell h1 { margin: 0; font-size: 20px; }
+.settings-shell__nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.settings-shell__nav button { padding: 7px 12px; border: 1px solid #40536a; border-radius: 6px; background: #1d2b3c; color: #f6f8fa; cursor: pointer; }
+.settings-shell__nav button[aria-current="page"] { border-color: #89b9f5; background: #304f72; }
+.settings-shell__content { margin-top: 18px; }

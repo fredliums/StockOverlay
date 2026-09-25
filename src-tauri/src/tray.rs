@@ -83,7 +83,7 @@ pub(crate) fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
     }
 }
 
-fn open_settings(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn open_settings(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("settings") {
         window.show()?;
         return window.set_focus();

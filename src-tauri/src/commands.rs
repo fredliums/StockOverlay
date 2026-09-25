@@ -233,6 +233,13 @@ pub fn get_window_mode(window: WebviewWindow) -> Result<bool, CommandError> {
 }
 
 #[tauri::command]
+pub fn open_settings(window: WebviewWindow) -> Result<(), CommandError> {
+    require_app_window(&window)?;
+    crate::tray::open_settings(&window.app_handle())
+        .map_err(|error| CommandError::new("settings_window", error.to_string()))
+}
+
+#[tauri::command]
 pub fn get_shortcut_status(
     window: WebviewWindow,
 ) -> Result<crate::shortcuts::ShortcutStatus, CommandError> {
