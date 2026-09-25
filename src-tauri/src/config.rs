@@ -88,7 +88,7 @@ pub struct DisplayConfig {
 impl Default for DisplayConfig {
     fn default() -> Self {
         Self {
-            font_size: 18,
+            font_size: 12,
             background_opacity: 0.0,
             text_opacity: 1.0,
             show_name: true,

@@ -16,16 +16,16 @@ type Field = { key: string; label: string; value: string };
 
 export function quoteFields(quote: Quote | null, display: DisplayConfig): Field[] {
   return [
-    ...(display.showPrice ? [{ key: 'price', label: '现', value: formatPrice(quote?.price) }] : []),
-    ...(display.showChange ? [{ key: 'change', label: '涨跌', value: formatChange(quote?.change) }] : []),
-    ...(display.showChangePercent ? [{ key: 'changePercent', label: '涨跌幅', value: formatChangePercent(quote?.changePercent) }] : []),
+    ...(display.showPrice ? [{ key: 'price', label: '', value: formatPrice(quote?.price) }] : []),
+    ...(display.showChange ? [{ key: 'change', label: '', value: formatChange(quote?.change) }] : []),
+    ...(display.showChangePercent ? [{ key: 'changePercent', label: '', value: formatChangePercent(quote?.changePercent) }] : []),
     ...(display.showTurnover ? [{ key: 'turnover', label: '额', value: formatTurnover(quote?.turnover) }] : []),
     ...(display.showHigh ? [{ key: 'high', label: '高', value: formatPrice(quote?.high) }] : []),
     ...(display.showLow ? [{ key: 'low', label: '低', value: formatPrice(quote?.low) }] : []),
     ...(display.showTurnoverRate ? [{ key: 'turnoverRate', label: '换', value: formatTurnoverRate(quote?.turnoverRate) }] : []),
     ...(display.showPE ? [{ key: 'pe', label: 'PE', value: formatPE(quote?.pe) }] : []),
-    ...(display.showVolumeRatio ? [{ key: 'volumeRatio', label: '量比', value: formatVolumeRatio(quote?.volumeRatio) }] : []),
-    ...(display.showOrderRatio ? [{ key: 'orderRatio', label: '委比', value: formatOrderRatio(quote?.orderRatio) }] : []),
+    ...(display.showVolumeRatio ? [{ key: 'volumeRatio', label: '量', value: formatVolumeRatio(quote?.volumeRatio) }] : []),
+    ...(display.showOrderRatio ? [{ key: 'orderRatio', label: '委', value: formatOrderRatio(quote?.orderRatio) }] : []),
     ...(display.orderBookDepth === 1 ? [{ key: 'level1', label: '', value: '' }] : []),
   ];
 }
@@ -47,7 +47,7 @@ export function QuoteFields({
     {visible.map(({ field, index }) => field.key === 'level1'
       ? <CompactLevel1 key={field.key} quote={quote} atomIndex={index} />
       : <span className={`quote-field quote-field--${field.key}`} data-atom-index={index} key={field.key}>
-      <span className="quote-field__label">{field.label}</span>
+      {field.label && <span className="quote-field__label">{field.label}</span>}
       <span className="quote-field__value">{field.value}</span>
     </span>)}
   </div>;

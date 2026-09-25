@@ -10,7 +10,7 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; background: transparent; }
 
 .overlay {
-  --quote-font-size: 18px;
+  --quote-font-size: 12px;
   --background-opacity: 0;
   --text-opacity: 1;
   --rise-rgb: 255 105 98;
