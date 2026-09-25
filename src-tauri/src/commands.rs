@@ -233,10 +233,13 @@ pub fn get_window_mode(window: WebviewWindow) -> Result<bool, CommandError> {
 }
 
 #[tauri::command]
-pub fn open_settings(window: WebviewWindow) -> Result<(), CommandError> {
+pub async fn open_settings(window: WebviewWindow) -> Result<(), CommandError> {
     require_app_window(&window)?;
-    crate::tray::open_settings(&window.app_handle())
-        .map_err(|error| CommandError::new("settings_window", error.to_string()))
+    let app = window.app_handle().clone();
+    tauri::async_runtime::spawn_blocking(move || crate::tray::open_settings(&app))
+        .await
+        .map_err(|error| CommandError::new("settings_window", error.to_string()))?
+        .map_err(|error| CommandError::new("settings_window", error))
 }
 
 #[tauri::command]

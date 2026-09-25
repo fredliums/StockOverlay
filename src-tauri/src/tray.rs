@@ -1,3 +1,4 @@
+use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
@@ -11,6 +12,7 @@ const EXIT: &str = "exit";
 
 pub struct TrayState {
     lock: MenuItem<tauri::Wry>,
+    settings_open_lock: Mutex<()>,
 }
 
 pub fn install(app: &mut App) -> tauri::Result<()> {
@@ -28,7 +30,16 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
             let result: Result<(), String> = match event.id.as_ref() {
                 VISIBILITY => toggle_main_visibility(app).map_err(|error| error.to_string()),
                 LOCK => crate::window_control::toggle_lock(app).map(|_| ()),
-                SETTINGS => open_settings(app).map_err(|error| error.to_string()),
+                SETTINGS => {
+                    let handle = app.clone();
+                    std::thread::spawn(move || {
+                        if let Err(error) = open_settings(&handle) {
+                            eprintln!("could not open settings: {error}");
+                            let _ = handle.emit("window:error", error.to_string());
+                        }
+                    });
+                    Ok(())
+                }
                 EXIT => {
                     if let Err(error) = crate::window_placement::save_current(app) {
                         eprintln!("could not save final window placement: {error}");
@@ -48,7 +59,10 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
-    app.manage(TrayState { lock });
+    app.manage(TrayState {
+        lock,
+        settings_open_lock: Mutex::new(()),
+    });
     Ok(())
 }
 
@@ -83,16 +97,22 @@ pub(crate) fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
     }
 }
 
-pub(crate) fn open_settings(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn open_settings(app: &AppHandle) -> Result<(), String> {
+    let tray = app.state::<TrayState>();
+    let _guard = tray
+        .settings_open_lock
+        .lock()
+        .map_err(|_| "Settings window state is unavailable.".to_string())?;
     if let Some(window) = app.get_webview_window("settings") {
-        window.show()?;
-        return window.set_focus();
+        window.show().map_err(|error| error.to_string())?;
+        return window.set_focus().map_err(|error| error.to_string());
     }
     WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("index.html".into()))
         .title("StockOverlay 设置")
         .inner_size(720.0, 560.0)
         .min_inner_size(480.0, 360.0)
         .center()
-        .build()?;
+        .build()
+        .map_err(|error| error.to_string())?;
     Ok(())
 }
