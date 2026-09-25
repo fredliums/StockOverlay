@@ -1,13 +1,17 @@
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    App, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder,
+    App, AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 const VISIBILITY: &str = "visibility";
 const LOCK: &str = "lock";
 const SETTINGS: &str = "settings";
 const EXIT: &str = "exit";
+
+pub struct TrayState {
+    lock: MenuItem<tauri::Wry>,
+}
 
 pub fn install(app: &mut App) -> tauri::Result<()> {
     let visibility = MenuItem::with_id(app, VISIBILITY, "显示 / 隐藏", true, None::<&str>)?;
@@ -21,10 +25,12 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         .menu(&menu)
         .tooltip("StockOverlay")
         .on_menu_event(|app, event| {
-            let result = match event.id.as_ref() {
-                VISIBILITY => toggle_main_visibility(app),
-                SETTINGS => open_settings(app),
+            let result: Result<(), String> = match event.id.as_ref() {
+                VISIBILITY => toggle_main_visibility(app).map_err(|error| error.to_string()),
+                LOCK => crate::window_control::toggle_lock(app).map(|_| ()),
+                SETTINGS => open_settings(app).map_err(|error| error.to_string()),
                 EXIT => {
+                    crate::shortcuts::unregister_all(app);
                     app.exit(0);
                     Ok(())
                 }
@@ -32,16 +38,34 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
             };
             if let Err(error) = result {
                 eprintln!("tray action failed: {error}");
+                let _ = app.emit("window:error", error);
             }
         });
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
     tray.build(app)?;
+    app.manage(TrayState { lock });
     Ok(())
 }
 
-fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
+pub(crate) fn set_lock_menu(app: &AppHandle, available: bool, locked: bool) -> tauri::Result<()> {
+    if let Some(tray) = app.try_state::<TrayState>() {
+        tray.lock.set_enabled(available)?;
+        tray.lock.set_text(if locked { "解锁" } else { "锁定" })?;
+    }
+    Ok(())
+}
+
+pub(crate) fn set_lock_error(app: &AppHandle, error: &str) -> tauri::Result<()> {
+    if let Some(tray) = app.try_state::<TrayState>() {
+        tray.lock.set_enabled(false)?;
+        tray.lock.set_text(format!("锁定不可用：{error}"))?;
+    }
+    Ok(())
+}
+
+pub(crate) fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
     if let Some(window) = app.get_webview_window("main") {
         if window.is_visible()? {
             window.hide()

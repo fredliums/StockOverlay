@@ -16,9 +16,28 @@ function errorMessage(error: unknown): string {
 
 export default function App() {
   if (getCurrentWindow().label === 'settings') {
-    return <main className="settings-shell"><h1>StockOverlay 设置</h1></main>;
+    return <SettingsShell />;
   }
   return <OverlayApp />;
+}
+
+type ShortcutStatus = {
+  lockError: string | null;
+  visibilityError: string | null;
+};
+
+function SettingsShell() {
+  const [status, setStatus] = useState<ShortcutStatus | null>(null);
+  useEffect(() => {
+    invoke<ShortcutStatus>('get_shortcut_status').then(setStatus).catch(() => {});
+  }, []);
+  return (
+    <main className="settings-shell">
+      <h1>StockOverlay 设置</h1>
+      {status?.lockError && <p role="alert">锁定快捷键不可用：{status.lockError}</p>}
+      {status?.visibilityError && <p role="alert">显示快捷键不可用：{status.visibilityError}</p>}
+    </main>
+  );
 }
 
 function OverlayApp() {
@@ -26,6 +45,33 @@ function OverlayApp() {
   const [snapshot, setSnapshot] = useState<QuoteSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [windowError, setWindowError] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    let stopMode: (() => void) | undefined;
+    let stopError: (() => void) | undefined;
+    listen<boolean>('window:mode', (event) => {
+      if (active) setLocked(event.payload);
+    }).then((stop) => {
+      if (!active) {
+        stop();
+        return;
+      }
+      stopMode = stop;
+      invoke<boolean>('get_window_mode')
+        .then((mode) => { if (active) setLocked(mode); })
+        .catch((reason: unknown) => { if (active) setWindowError(errorMessage(reason)); });
+    }).catch((reason: unknown) => { if (active) setWindowError(errorMessage(reason)); });
+    listen<string>('window:error', (event) => {
+      if (active) setWindowError(event.payload);
+    }).then((stop) => { if (active) stopError = stop; else stop(); });
+    return () => {
+      active = false;
+      stopMode?.();
+      stopError?.();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -107,7 +153,7 @@ function OverlayApp() {
 
   return (
     <main className="overlay">
-      <header className="overlay__toolbar">
+      {!locked && <header className="overlay__toolbar">
         <div
           className="overlay__drag"
           onPointerDown={(event) => {
@@ -119,16 +165,16 @@ function OverlayApp() {
           <span className="overlay__title">StockOverlay</span>
         </div>
         <span className="overlay__mode">编辑</span>
-      </header>
+      </header>}
       <div className="overlay__status">{status}</div>
       {windowError && <div className="overlay__error" role="alert">{windowError}</div>}
-      <div
+      {!locked && <div
         className="overlay__resize"
         title="调整窗口大小"
         onPointerDown={(event) => {
           if (event.button === 0) startResize();
         }}
-      />
+      />}
     </main>
   );
 }

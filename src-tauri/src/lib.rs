@@ -3,15 +3,18 @@ pub mod config;
 pub mod provider;
 pub mod quote;
 mod service;
+mod shortcuts;
 pub mod stock_index;
 pub mod tencent;
 mod tray;
+mod window_control;
 use std::sync::Arc;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             tray::install(app)?;
             let state = Arc::new(commands::AppState::new(
@@ -20,6 +23,10 @@ pub fn run() {
             let provider = provider::TencentQuoteProvider::new()?;
             let service = Arc::new(service::QuoteService::new(provider, Arc::clone(&state)));
             app.manage(state);
+            window_control::install(app);
+            if let Err(error) = shortcuts::install(app) {
+                eprintln!("could not initialize shortcuts: {error}");
+            }
             Arc::clone(&service).start(app.handle().clone());
             app.manage(service);
             Ok(())
@@ -38,6 +45,9 @@ pub fn run() {
             commands::load_config,
             commands::save_config,
             commands::get_quote_snapshot,
+            commands::get_window_mode,
+            commands::get_shortcut_status,
+            commands::change_shortcut,
             commands::search_stocks,
             commands::add_stock,
             commands::remove_stock,

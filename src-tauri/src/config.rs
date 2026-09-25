@@ -207,7 +207,7 @@ fn valid_stock_code(value: &str) -> bool {
     }
 }
 
-fn shortcut_key(value: &str) -> Result<String, ConfigError> {
+pub(crate) fn shortcut_key(value: &str) -> Result<String, ConfigError> {
     let parts: Vec<_> = value.split('+').collect();
     if parts.len() < 2 {
         return Err(ConfigError::Invalid(format!("invalid shortcut {value}")));

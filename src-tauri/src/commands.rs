@@ -10,7 +10,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
-use tauri::{Emitter, State, WebviewWindow};
+use tauri::{Emitter, Manager, State, WebviewWindow};
 
 pub struct AppState {
     pub(crate) config: ConfigStore,
@@ -215,6 +215,33 @@ pub fn get_quote_snapshot(
         .lock()
         .map(|snapshot| snapshot.clone())
         .map_err(|_| CommandError::new("quote_state", "Quote state is unavailable."))
+}
+
+#[tauri::command]
+pub fn get_window_mode(window: WebviewWindow) -> Result<bool, CommandError> {
+    require_app_window(&window)?;
+    crate::window_control::current_mode(&window.app_handle())
+        .map_err(|error| CommandError::new("window_mode", error))
+}
+
+#[tauri::command]
+pub fn get_shortcut_status(
+    window: WebviewWindow,
+) -> Result<crate::shortcuts::ShortcutStatus, CommandError> {
+    require_app_window(&window)?;
+    crate::shortcuts::status(&window.app_handle())
+        .map_err(|error| CommandError::new("shortcut_status", error))
+}
+
+#[tauri::command]
+pub fn change_shortcut(
+    window: WebviewWindow,
+    action: String,
+    key: String,
+) -> Result<crate::shortcuts::ShortcutStatus, CommandError> {
+    require_app_window(&window)?;
+    crate::shortcuts::change(&window.app_handle(), &action, &key)
+        .map_err(|error| CommandError::new("shortcut_change", error))
 }
 
 #[tauri::command]
