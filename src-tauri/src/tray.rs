@@ -97,7 +97,7 @@ pub(crate) fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
     }
 }
 
-pub(crate) fn open_settings(app: &AppHandle) -> Result<(), String> {
+fn open_settings(app: &AppHandle) -> Result<(), String> {
     let tray = app.state::<TrayState>();
     let _guard = tray
         .settings_open_lock

@@ -26,21 +26,9 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
   overflow: auto;
   display: flex;
   flex-direction: column;
+  cursor: grab;
   user-select: none;
 }
-
-.overlay__toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 26px; }
-.overlay__drag { display: flex; flex: 1; align-items: center; gap: 8px; height: 30px; cursor: grab; }
-.overlay__drag:active { cursor: grabbing; }
-.overlay__drag-icon { font-size: .9em; color: rgb(156 171 189 / var(--text-opacity)); }
-.overlay__title { font-size: .9em; font-weight: 700; }
-.overlay__mode { font-size: .65em; color: rgb(156 171 189 / var(--text-opacity)); }
-.overlay__settings { margin-right: 10px; border: 0; background: transparent; color: inherit; font: inherit; font-size: .65em; cursor: pointer; }
-.overlay__settings:hover { text-decoration: underline; }
-.overlay__status { margin-top: 12px; font-size: .75em; color: rgb(183 194 210 / var(--text-opacity)); }
-.overlay__error { margin-top: 8px; font-size: .7em; color: rgb(255 180 168 / var(--text-opacity)); }
-.overlay__resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
-.overlay__resize::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 8px; height: 8px; border-right: 2px solid #9cabbd; border-bottom: 2px solid #9cabbd; }
 
 .stock-pages { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .stock-pages__edit { flex: 1; min-height: 0; overflow: auto; }

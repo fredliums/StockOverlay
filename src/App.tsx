@@ -1,22 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
+import { emit } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type PointerEvent } from 'react';
 import { appStore } from './appStore';
 import { PaginatedStockList } from './components/PaginatedStockList';
 import { WatchlistSettings } from './components/WatchlistSettings';
 import { AppearanceSettings, DisplaySettings, QuoteSettings } from './components/DisplaySettings';
 import { ShortcutSettings, type ShortcutStatus } from './components/ShortcutSettings';
 
-function errorMessage(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    return String(error.message);
-  }
-  return String(error);
-}
-
 function useAppState() {
   return useSyncExternalStore(appStore.subscribe, appStore.getState);
 }
+
+type ResizeDirection = 'North' | 'South' | 'East' | 'West' |
+  'NorthEast' | 'NorthWest' | 'SouthEast' | 'SouthWest';
+const resizeCursors: Record<ResizeDirection, string> = {
+  North: 'ns-resize', South: 'ns-resize', East: 'ew-resize', West: 'ew-resize',
+  NorthEast: 'nesw-resize', SouthWest: 'nesw-resize',
+  NorthWest: 'nwse-resize', SouthEast: 'nwse-resize',
+};
 
 export default function App() {
   useEffect(() => appStore.connect(), []);
@@ -71,8 +73,7 @@ function SettingsShell() {
 }
 
 function OverlayApp() {
-  const { config, snapshot, watchlist, locked, error } = useAppState();
-  const [windowError, setWindowError] = useState<string | null>(null);
+  const { config, snapshot, watchlist, locked } = useAppState();
   const overlayRef = useRef<HTMLElement>(null);
   const lastMinimum = useRef('');
   const appearance = config ? {
@@ -94,16 +95,13 @@ function OverlayApp() {
       const widest = Math.max(0, ...Array.from(atomic, (item) => item.scrollWidth));
       const tallest = Math.max(0, ...Array.from(atomic, (item) => item.getBoundingClientRect().height));
       const identity = overlay.querySelector<HTMLElement>('.stock-card__identity');
-      const toolbar = overlay.querySelector<HTMLElement>('.overlay__toolbar');
-      const status = overlay.querySelector<HTMLElement>('.overlay__status');
       const width = Math.ceil(widest + 54);
-      const height = Math.ceil(64 + (toolbar?.offsetHeight ?? 0) + (status?.offsetHeight ?? 0)
-        + (identity?.offsetHeight ?? 0) + tallest);
+      const height = Math.ceil(64 + (identity?.offsetHeight ?? 0) + tallest);
       const key = `${width}:${height}`;
       if (key === lastMinimum.current) return;
       lastMinimum.current = key;
       invoke('set_content_min_size', { width, height }).catch((reason: unknown) => {
-        setWindowError(`设置最小尺寸失败：${errorMessage(reason)}`);
+        reportWindowError('设置悬浮窗最小尺寸失败', reason);
       });
     };
     const observer = new ResizeObserver(() => {
@@ -115,52 +113,50 @@ function OverlayApp() {
     return () => { observer.disconnect(); cancelAnimationFrame(frame); };
   }, [config, snapshot, watchlist, locked]);
 
-  const startDrag = () => {
-    getCurrentWindow().startDragging().catch((reason: unknown) => {
-      setWindowError(`窗口拖动失败：${errorMessage(reason)}`);
-    });
+  const resizeDirection = (event: PointerEvent<HTMLElement>): ResizeDirection | null => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const left = event.clientX - bounds.left <= 12;
+    const right = bounds.right - event.clientX <= 12;
+    const top = event.clientY - bounds.top <= 12;
+    const bottom = bounds.bottom - event.clientY <= 12;
+    if (top && left) return 'NorthWest';
+    if (top && right) return 'NorthEast';
+    if (bottom && left) return 'SouthWest';
+    if (bottom && right) return 'SouthEast';
+    if (left) return 'West';
+    if (right) return 'East';
+    if (top) return 'North';
+    if (bottom) return 'South';
+    return null;
   };
 
-  const startResize = () => {
-    getCurrentWindow().startResizeDragging('SouthEast').catch((reason: unknown) => {
-      setWindowError(`窗口调整大小失败：${errorMessage(reason)}`);
-    });
+  const pointerCursor = (event: PointerEvent<HTMLElement>) => {
+    if (locked) return;
+    const direction = resizeDirection(event);
+    event.currentTarget.style.cursor = direction ? resizeCursors[direction] : 'grab';
   };
 
-  const status = config && snapshot
-    ? `${config.stocks.length} 只自选股 · ${snapshot.quotes.length} 条行情`
-    : '正在加载配置…';
+  const reportWindowError = (message: string, reason: unknown) => {
+    console.error(message, reason);
+    const detail = typeof reason === 'object' && reason !== null && 'message' in reason
+      ? String(reason.message) : String(reason);
+    void emit('window:error', `${message}：${detail}`).catch(console.error);
+  };
 
   return (
-    <main className="overlay" ref={overlayRef} style={appearance}>
-      {!locked && <header className="overlay__toolbar">
-        <div
-          className="overlay__drag"
-          onPointerDown={(event) => {
-            if (event.button === 0) startDrag();
-          }}
-          title="拖动悬浮窗"
-        >
-          <span className="overlay__drag-icon" aria-hidden="true">⠿</span>
-          <span className="overlay__title">StockOverlay</span>
-        </div>
-        <button className="overlay__settings" type="button" onClick={() => {
-          invoke('open_settings').catch((reason: unknown) => {
-            setWindowError(`打开设置失败：${errorMessage(reason)}`);
-          });
-        }}>设置</button>
-        <span className="overlay__mode">编辑</span>
-      </header>}
-      <div className="overlay__status">{status}</div>
-      {(windowError || error) && <div className="overlay__error" role="alert">{windowError || error}</div>}
+    <main className="overlay" ref={overlayRef} style={appearance}
+      onPointerMove={pointerCursor}
+      onPointerLeave={(event) => { event.currentTarget.style.cursor = 'grab'; }}
+      onPointerDown={(event) => {
+        if (locked || event.button !== 0) return;
+        const direction = resizeDirection(event);
+        const operation = direction
+          ? getCurrentWindow().startResizeDragging(direction)
+          : getCurrentWindow().startDragging();
+        operation.catch((reason: unknown) => reportWindowError('移动或调整悬浮窗失败', reason));
+      }}
+    >
       {config && <PaginatedStockList config={config} snapshot={snapshot} watchlist={watchlist} locked={locked} />}
-      {!locked && <div
-        className="overlay__resize"
-        title="调整窗口大小"
-        onPointerDown={(event) => {
-          if (event.button === 0) startResize();
-        }}
-      />}
     </main>
   );
 }

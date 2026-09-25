@@ -61,7 +61,6 @@ pub fn run() {
             commands::save_config,
             commands::get_quote_snapshot,
             commands::get_window_mode,
-            commands::open_settings,
             commands::set_content_min_size,
             commands::get_shortcut_status,
             commands::change_shortcut,

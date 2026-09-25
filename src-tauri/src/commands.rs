@@ -233,16 +233,6 @@ pub fn get_window_mode(window: WebviewWindow) -> Result<bool, CommandError> {
 }
 
 #[tauri::command]
-pub async fn open_settings(window: WebviewWindow) -> Result<(), CommandError> {
-    require_app_window(&window)?;
-    let app = window.app_handle().clone();
-    tauri::async_runtime::spawn_blocking(move || crate::tray::open_settings(&app))
-        .await
-        .map_err(|error| CommandError::new("settings_window", error.to_string()))?
-        .map_err(|error| CommandError::new("settings_window", error))
-}
-
-#[tauri::command]
 pub fn get_shortcut_status(
     window: WebviewWindow,
 ) -> Result<crate::shortcuts::ShortcutStatus, CommandError> {
