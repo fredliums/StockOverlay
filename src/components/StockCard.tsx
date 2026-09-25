@@ -33,7 +33,9 @@ export function StockCard({
   const name = quote?.name || entry?.name || `${market} ${symbol}`;
   const showIdentity = display.showName || display.showCode;
   const message = statusText(status, quote);
-  return <section className="stock-card" aria-label={`${name} ${market} ${symbol}`}>
+  const direction = (quote?.change ?? quote?.changePercent ?? 0) > 0
+    ? 'rise' : (quote?.change ?? quote?.changePercent ?? 0) < 0 ? 'fall' : 'flat';
+  return <section className="stock-card" data-direction={direction} aria-label={`${name} ${market} ${symbol}`}>
     <div className="stock-card__identity">
       {(display.showName || !showIdentity) && <strong>{name}</strong>}
       {display.showCode && <span className="stock-card__code">{market} {symbol}</span>}

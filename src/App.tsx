@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { appStore } from './appStore';
 import { StockList } from './components/StockList';
 
@@ -49,6 +49,13 @@ function SettingsShell() {
 function OverlayApp() {
   const { config, snapshot, watchlist, locked, error } = useAppState();
   const [windowError, setWindowError] = useState<string | null>(null);
+  const appearance = config ? {
+    '--quote-font-size': `${config.display.fontSize}px`,
+    '--background-opacity': config.display.backgroundOpacity,
+    '--text-opacity': config.display.textOpacity,
+    '--rise-rgb': config.display.redForRise ? '255 105 98' : '74 207 142',
+    '--fall-rgb': config.display.redForRise ? '74 207 142' : '255 105 98',
+  } as CSSProperties : undefined;
 
   const startDrag = () => {
     getCurrentWindow().startDragging().catch((reason: unknown) => {
@@ -67,7 +74,7 @@ function OverlayApp() {
     : '正在加载配置…';
 
   return (
-    <main className="overlay">
+    <main className="overlay" style={appearance}>
       {!locked && <header className="overlay__toolbar">
         <div
           className="overlay__drag"

@@ -29,7 +29,7 @@ export function QuoteFields({ quote, display }: { quote: Quote | null; display: 
   ];
 
   return <div className="quote-fields">
-    {fields.map((field) => <span className="quote-field" key={field.key}>
+    {fields.map((field) => <span className={`quote-field quote-field--${field.key}`} key={field.key}>
       <span className="quote-field__label">{field.label}</span>
       <span className="quote-field__value">{field.value}</span>
     </span>)}
