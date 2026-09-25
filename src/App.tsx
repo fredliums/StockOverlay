@@ -15,6 +15,13 @@ function errorMessage(error: unknown): string {
 }
 
 export default function App() {
+  if (getCurrentWindow().label === 'settings') {
+    return <main className="settings-shell"><h1>StockOverlay 设置</h1></main>;
+  }
+  return <OverlayApp />;
+}
+
+function OverlayApp() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [snapshot, setSnapshot] = useState<QuoteSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);

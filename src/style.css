@@ -29,3 +29,6 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 .overlay__error { margin-top: 8px; font-size: 12px; color: #ffb4a8; }
 .overlay__resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
 .overlay__resize::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 8px; height: 8px; border-right: 2px solid #9cabbd; border-bottom: 2px solid #9cabbd; }
+
+.settings-shell { min-height: 100%; padding: 24px; background: #111b2b; }
+.settings-shell h1 { margin: 0; font-size: 20px; }
