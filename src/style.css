@@ -42,6 +42,12 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 .quote-field { display: inline-flex; align-items: baseline; gap: 3px; white-space: nowrap; font-size: 12px; }
 .quote-field__label { color: #9cabbd; }
 .quote-field__value { font-variant-numeric: tabular-nums; }
+.quote-field--level1 { font-variant-numeric: tabular-nums; }
+.order-book { flex-basis: 100%; width: max-content; max-width: 100%; margin-top: 3px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.order-book__side { display: flex; flex-direction: column; gap: 2px; }
+.order-book__side--bid { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(185, 202, 222, .3); }
+.order-book__row { display: flex; gap: 12px; white-space: nowrap; }
+.order-book__label { min-width: 2em; color: #9cabbd; }
 
 .settings-shell { min-height: 100%; padding: 24px; background: #111b2b; }
 .settings-shell h1 { margin: 0; font-size: 20px; }

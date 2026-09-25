@@ -54,7 +54,8 @@ export function formatOrderRatio(value: number | null | undefined): string {
 }
 
 export function formatLots(value: number | null | undefined): string {
-  return valid(value) && value >= 0 ? decimal(value, 0) : MISSING;
+  if (!valid(value) || value < 0) return MISSING;
+  return value >= 10_000 ? `${trimmed(value / 10_000, 1)}万` : decimal(value, 0);
 }
 
 export function formatLevel(level: OrderLevel | null | undefined): string {

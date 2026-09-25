@@ -10,6 +10,7 @@ import {
 } from '../formatter';
 import type { DisplayConfig } from '../types/config';
 import type { Quote } from '../types/quote';
+import { CompactLevel1 } from './OrderBook';
 
 type Field = { key: string; label: string; value: string };
 
@@ -32,5 +33,6 @@ export function QuoteFields({ quote, display }: { quote: Quote | null; display: 
       <span className="quote-field__label">{field.label}</span>
       <span className="quote-field__value">{field.value}</span>
     </span>)}
+    {display.orderBookDepth === 1 && <CompactLevel1 quote={quote} />}
   </div>;
 }

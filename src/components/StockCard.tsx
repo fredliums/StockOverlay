@@ -2,6 +2,7 @@ import type { DisplayConfig } from '../types/config';
 import type { Quote, QuoteStatus } from '../types/quote';
 import type { StockEntry } from '../types/stock';
 import { QuoteFields } from './QuoteFields';
+import { OrderBook } from './OrderBook';
 
 function statusText(status: QuoteStatus | null, quote: Quote | null): string | null {
   if (!status || status.state === 'loading') return '加载中';
@@ -38,6 +39,8 @@ export function StockCard({
       {display.showCode && <span className="stock-card__code">{market} {symbol}</span>}
     </div>
     <QuoteFields quote={quote} display={display} />
+    {(display.orderBookDepth === 3 || display.orderBookDepth === 5) &&
+      <OrderBook quote={quote} depth={display.orderBookDepth} />}
     {message && <div className={`stock-card__status stock-card__status--${status?.state ?? 'loading'}`}>{message}</div>}
   </section>;
 }

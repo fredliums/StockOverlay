@@ -43,6 +43,8 @@ test('keeps ask-one before bid-one and treats missing values as missing', () => 
   assert.equal(formatLevel1(null, null), '-- / --');
   assert.equal(formatLevel1({ price: null, volumeLots: 4 }, bid), '-- / 1418.70-102');
   assert.equal(formatLevel({ price: 1.2, volumeLots: 0 }), '1.20-0');
+  assert.equal(formatLevel({ price: 1.2, volumeLots: 12_000 }), '1.20-1.2万');
+  assert.equal(formatLots(36_000), '3.6万');
   assert.equal(formatLots(null), '--');
 });
 
