@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { useState, type KeyboardEvent } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { appStore } from '../appStore';
 import { shortcutFromKeyEvent } from '../shortcutCapture';
 import type { AppConfig } from '../types/config';
@@ -26,8 +27,30 @@ export function ShortcutSettings({
   onStatusChange: (status: ShortcutStatus) => void;
 }) {
   const [recording, setRecording] = useState<'toggleLock' | 'toggleVisibility' | null>(null);
+  const recordingRef = useRef<'toggleLock' | 'toggleVisibility' | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    let stop: (() => void) | undefined;
+    void listen<'toggleLock' | 'toggleVisibility'>('shortcut:pressed', (event) => {
+      if (!active) return;
+      const target = recordingRef.current;
+      if (!target) return;
+      recordingRef.current = null;
+      setRecording(null);
+      setMessage(target === event.payload
+        ? '这是当前快捷键，未修改设置。'
+        : '组合键已被另一个功能占用，原快捷键保持不变。');
+    }).then((unlisten) => {
+      if (active) stop = unlisten;
+      else unlisten();
+    }).catch((error: unknown) => {
+      if (active) setMessage(`无法监听快捷键冲突：${errorMessage(error)}`);
+    });
+    return () => { active = false; stop?.(); };
+  }, []);
 
   const save = async (action: 'toggleLock' | 'toggleVisibility', key: string) => {
     setSaving(true);
@@ -50,6 +73,7 @@ export function ShortcutSettings({
     event.stopPropagation();
     if (event.repeat) return;
     if (event.key === 'Escape') {
+      recordingRef.current = null;
       setRecording(null);
       setMessage('已取消录制');
       return;
@@ -59,6 +83,7 @@ export function ShortcutSettings({
       setMessage('请按住至少一个修饰键，再按字母、数字或 F1～F24。');
       return;
     }
+    recordingRef.current = null;
     setRecording(null);
     setMessage(null);
     void save(action, key);
@@ -69,9 +94,9 @@ export function ShortcutSettings({
       <span>{label}</span>
       <button type="button" className="shortcut-capture" disabled={saving}
         aria-label={`录制${label}快捷键`} aria-pressed={recording === action}
-        onClick={() => { setRecording(action); setMessage('请按组合键；按 Esc 取消。'); }}
+        onClick={() => { recordingRef.current = action; setRecording(action); setMessage('请按组合键；按 Esc 取消。'); }}
         onKeyDown={(event) => capture(event, action)}
-        onBlur={() => { if (recording === action) setRecording(null); }}
+        onBlur={() => { if (recordingRef.current === action) { recordingRef.current = null; setRecording(null); } }}
       >{recording === action ? '请按组合键…' : key}</button>
       <span className="settings-form__hint">{registered ? '已注册' : '未注册'}</span>
     </div>;

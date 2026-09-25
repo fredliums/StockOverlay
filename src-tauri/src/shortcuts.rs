@@ -48,6 +48,11 @@ fn register(app: &AppHandle, action: Action, key: &str) -> Result<(), String> {
             if event.state != ShortcutState::Pressed {
                 return;
             }
+            let action_name = match action {
+                Action::Lock => "toggleLock",
+                Action::Visibility => "toggleVisibility",
+            };
+            let _ = app.emit("shortcut:pressed", action_name);
             let result = match action {
                 Action::Lock => window_control::toggle_lock(app).map(|_| ()),
                 Action::Visibility => {
