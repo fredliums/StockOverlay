@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { appStore } from './appStore';
 import { StockList } from './components/StockList';
+import { WatchlistSettings } from './components/WatchlistSettings';
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -35,7 +36,7 @@ const settingsTabs: { id: SettingsTab; label: string }[] = [
 ];
 
 function SettingsShell() {
-  const { config, snapshot, error } = useAppState();
+  const { config, snapshot, watchlist, error } = useAppState();
   const [tab, setTab] = useState<SettingsTab>('watchlist');
   const [shortcuts, setShortcuts] = useState<ShortcutStatus | null>(null);
   useEffect(() => {
@@ -58,7 +59,9 @@ function SettingsShell() {
         >{item.label}</button>)}
       </nav>
       <section className="settings-shell__content" aria-label={`${settingsTabs.find((item) => item.id === tab)?.label}设置`}>
-        {config ? <p>{tab === 'watchlist' ? '在这里搜索和管理自选股。' : '设置项加载中。'}</p> : <p>正在加载配置…</p>}
+        {!config && <p>正在加载配置…</p>}
+        {config && tab === 'watchlist' && <WatchlistSettings config={config} entries={watchlist} />}
+        {config && tab !== 'watchlist' && <p>设置项加载中。</p>}
       </section>
       {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
       {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}

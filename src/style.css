@@ -66,3 +66,13 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 .settings-shell__nav button { padding: 7px 12px; border: 1px solid #40536a; border-radius: 6px; background: #1d2b3c; color: #f6f8fa; cursor: pointer; }
 .settings-shell__nav button[aria-current="page"] { border-color: #89b9f5; background: #304f72; }
 .settings-shell__content { margin-top: 18px; }
+.settings-shell h2 { margin: 0 0 12px; font-size: 18px; }
+.settings-shell h3 { margin: 20px 0 8px; font-size: 15px; }
+.settings-shell input { display: block; width: min(100%, 400px); margin-top: 6px; padding: 8px; border: 1px solid #40536a; border-radius: 5px; background: #0d1725; color: #f6f8fa; font: inherit; }
+.settings-list { display: flex; flex-direction: column; gap: 5px; max-height: 230px; margin: 10px 0; padding: 0; overflow: auto; list-style: none; }
+.settings-list li { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid #40536a; border-radius: 5px; }
+.settings-list li > span:nth-last-child(2) { flex: 1; }
+.settings-list button { margin-left: auto; padding: 4px 9px; border: 1px solid #6086ad; border-radius: 5px; background: #304f72; color: #f6f8fa; cursor: pointer; }
+.settings-list button:disabled { opacity: .5; cursor: default; }
+.settings-list__drag { color: #9cabbd; cursor: grab; }
+.settings-shell__message { color: #a8ddbb; }
