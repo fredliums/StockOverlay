@@ -1,3 +1,4 @@
+pub mod config;
 pub mod quote;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
