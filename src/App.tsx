@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'r
 import { appStore } from './appStore';
 import { StockList } from './components/StockList';
 import { WatchlistSettings } from './components/WatchlistSettings';
+import { AppearanceSettings, DisplaySettings, QuoteSettings } from './components/DisplaySettings';
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -61,7 +62,10 @@ function SettingsShell() {
       <section className="settings-shell__content" aria-label={`${settingsTabs.find((item) => item.id === tab)?.label}设置`}>
         {!config && <p>正在加载配置…</p>}
         {config && tab === 'watchlist' && <WatchlistSettings config={config} entries={watchlist} />}
-        {config && tab !== 'watchlist' && <p>设置项加载中。</p>}
+        {config && tab === 'display' && <DisplaySettings config={config} />}
+        {config && tab === 'appearance' && <AppearanceSettings config={config} />}
+        {config && tab === 'quotes' && <QuoteSettings config={config} />}
+        {config && tab === 'shortcuts' && <p>快捷键设置将在下一步完成。</p>}
       </section>
       {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
       {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}
