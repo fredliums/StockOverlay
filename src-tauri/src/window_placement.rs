@@ -24,12 +24,31 @@ struct Rect {
 }
 
 impl Rect {
-    fn intersection_area(self, other: Self) -> u64 {
+    fn visible_size(self, other: Self) -> (u32, u32) {
         let right = (self.x as i64 + self.width as i64).min(other.x as i64 + other.width as i64);
         let bottom = (self.y as i64 + self.height as i64).min(other.y as i64 + other.height as i64);
-        let width = (right - (self.x as i64).max(other.x as i64)).max(0) as u64;
-        let height = (bottom - (self.y as i64).max(other.y as i64)).max(0) as u64;
-        width * height
+        (
+            (right - (self.x as i64).max(other.x as i64)).max(0) as u32,
+            (bottom - (self.y as i64).max(other.y as i64)).max(0) as u32,
+        )
+    }
+
+    fn intersection_area(self, other: Self) -> u64 {
+        let (width, height) = self.visible_size(other);
+        width as u64 * height as u64
+    }
+
+    fn recover(self, work: Self) -> Self {
+        let (visible_width, visible_height) = self.visible_size(work);
+        if self.width <= work.width
+            && self.height <= work.height
+            && visible_width >= 48
+            && visible_height >= 48
+        {
+            self
+        } else {
+            self.fit(work)
+        }
     }
 
     fn fit(self, work: Self) -> Self {
@@ -136,7 +155,7 @@ fn restore_from_config(app: &AppHandle) -> Result<(), String> {
         height: (config.window.height as f64 * scale).round() as u32,
     };
     let work = best_work_area(requested, &monitors, &primary);
-    apply_bounds(&window, requested.fit(work), work)
+    apply_bounds(&window, requested.recover(work), work)
 }
 
 pub fn ensure_visible(app: &AppHandle) -> Result<(), String> {
@@ -161,7 +180,7 @@ pub fn ensure_visible(app: &AppHandle) -> Result<(), String> {
         height: size.height,
     };
     let work = best_work_area(current, &monitors, &primary);
-    let corrected = current.fit(work);
+    let corrected = current.recover(work);
     if corrected != current {
         apply_bounds(&window, corrected, work)?;
         schedule_save(app);
@@ -274,6 +293,27 @@ pub(crate) fn save_current(app: &AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::Rect;
+
+    #[test]
+    fn preserves_bottom_edge_overlap_while_recovering_unreachable_windows() {
+        let work = Rect {
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1392,
+        };
+        let bottom = Rect {
+            x: 789,
+            y: 1205,
+            width: 835,
+            height: 235,
+        };
+        assert_eq!(bottom.recover(work), bottom);
+        assert_eq!(
+            Rect { y: 1370, ..bottom }.recover(work),
+            Rect { y: 1157, ..bottom }
+        );
+    }
 
     #[test]
     fn moves_offscreen_window_into_work_area_and_shrinks_oversize_window() {
