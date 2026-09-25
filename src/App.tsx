@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { LogicalSize } from '@tauri-apps/api/dpi';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
 import type { AppConfig } from './types/config';
 import type { QuoteSnapshot } from './types/quote';
@@ -16,6 +18,31 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [snapshot, setSnapshot] = useState<QuoteSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [windowError, setWindowError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getCurrentWindow()
+      .setMinSize(new LogicalSize(240, 80))
+      .catch((reason: unknown) => {
+        if (active) setWindowError(`窗口最小尺寸设置失败：${errorMessage(reason)}`);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const startDrag = () => {
+    getCurrentWindow().startDragging().catch((reason: unknown) => {
+      setWindowError(`窗口拖动失败：${errorMessage(reason)}`);
+    });
+  };
+
+  const startResize = () => {
+    getCurrentWindow().startResizeDragging('SouthEast').catch((reason: unknown) => {
+      setWindowError(`窗口调整大小失败：${errorMessage(reason)}`);
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -73,8 +100,28 @@ export default function App() {
 
   return (
     <main className="overlay">
-      <div className="overlay__title">StockOverlay</div>
+      <header className="overlay__toolbar">
+        <div
+          className="overlay__drag"
+          onPointerDown={(event) => {
+            if (event.button === 0) startDrag();
+          }}
+          title="拖动悬浮窗"
+        >
+          <span className="overlay__drag-icon" aria-hidden="true">⠿</span>
+          <span className="overlay__title">StockOverlay</span>
+        </div>
+        <span className="overlay__mode">编辑</span>
+      </header>
       <div className="overlay__status">{status}</div>
+      {windowError && <div className="overlay__error" role="alert">{windowError}</div>}
+      <div
+        className="overlay__resize"
+        title="调整窗口大小"
+        onPointerDown={(event) => {
+          if (event.button === 0) startResize();
+        }}
+      />
     </main>
   );
 }

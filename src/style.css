@@ -10,13 +10,22 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; background: transparent; }
 
 .overlay {
+  position: relative;
   width: 100%;
   min-height: 100%;
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-radius: 10px;
   background: rgba(12, 18, 28, .82);
   user-select: none;
 }
 
-.overlay__title { font-size: 18px; font-weight: 700; }
+.overlay__toolbar { display: flex; align-items: center; justify-content: space-between; min-height: 26px; }
+.overlay__drag { display: flex; flex: 1; align-items: center; gap: 8px; height: 30px; cursor: grab; }
+.overlay__drag:active { cursor: grabbing; }
+.overlay__drag-icon { font-size: 16px; color: #9cabbd; }
+.overlay__title { font-size: 16px; font-weight: 700; }
+.overlay__mode { font-size: 11px; color: #9cabbd; }
 .overlay__status { margin-top: 12px; font-size: 13px; color: #b7c2d2; }
+.overlay__error { margin-top: 8px; font-size: 12px; color: #ffb4a8; }
+.overlay__resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
+.overlay__resize::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 8px; height: 8px; border-right: 2px solid #9cabbd; border-bottom: 2px solid #9cabbd; }
