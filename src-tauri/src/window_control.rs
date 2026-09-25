@@ -32,8 +32,8 @@ pub fn set_recovery_ready(app: &AppHandle, ready: bool) -> Result<(), String> {
         .inner
         .lock()
         .map_err(|_| "Window mode is unavailable.".to_string())?;
-    state.recovery_ready = ready;
-    tray::set_lock_menu(app, ready, state.locked).map_err(|error| error.to_string())
+    state.recovery_ready = ready && tray::available(app);
+    tray::set_lock_menu(app, state.recovery_ready, state.locked).map_err(|error| error.to_string())
 }
 
 pub fn toggle_lock(app: &AppHandle) -> Result<bool, String> {

@@ -40,6 +40,7 @@ pub struct QuoteService<P: QuoteProvider> {
     refresh_active: AtomicBool,
     refresh_requested: AtomicBool,
     runtime: Mutex<Runtime>,
+    timer_task: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 #[derive(Default)]
@@ -83,6 +84,7 @@ impl<P: QuoteProvider> QuoteService<P> {
             refresh_active: AtomicBool::new(false),
             refresh_requested: AtomicBool::new(false),
             runtime: Mutex::new(Runtime::default()),
+            timer_task: Mutex::new(None),
         }
     }
 
@@ -256,27 +258,28 @@ impl<P: QuoteProvider> QuoteService<P> {
     where
         P: 'static,
     {
-        tauri::async_runtime::spawn(async move {
+        let service = Arc::clone(&self);
+        let task = tauri::async_runtime::spawn(async move {
             let mut timer = tokio::time::interval(TIMER_RESOLUTION);
             timer.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             let mut next_due = Instant::now();
             loop {
                 timer.tick().await;
                 let now = Instant::now();
-                let requested = self.refresh_requested.load(Ordering::Acquire);
+                let requested = service.refresh_requested.load(Ordering::Acquire);
                 if now < next_due && !requested {
                     continue;
                 }
-                let Ok(config) = self.state.config.get() else {
+                let Ok(config) = service.state.config.get() else {
                     continue;
                 };
                 let beijing = Utc::now().with_timezone(&FixedOffset::east_opt(8 * 3600).unwrap());
                 next_due = now + refresh_interval(beijing, config.refresh_interval);
-                if self.refresh_active.load(Ordering::Acquire) {
+                if service.refresh_active.load(Ordering::Acquire) {
                     continue;
                 }
-                self.refresh_requested.store(false, Ordering::Release);
-                let service = Arc::clone(&self);
+                service.refresh_requested.store(false, Ordering::Release);
+                let service = Arc::clone(&service);
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match service.refresh_once().await {
@@ -291,6 +294,21 @@ impl<P: QuoteProvider> QuoteService<P> {
                 });
             }
         });
+        if let Ok(mut current) = self.timer_task.lock() {
+            if let Some(old) = current.replace(task) {
+                old.abort();
+            }
+        } else {
+            task.abort();
+        }
+    }
+
+    pub fn stop(&self) {
+        if let Ok(mut current) = self.timer_task.lock() {
+            if let Some(task) = current.take() {
+                task.abort();
+            }
+        }
     }
 }
 

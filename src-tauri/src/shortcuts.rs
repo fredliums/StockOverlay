@@ -92,17 +92,27 @@ pub fn install(app: &mut App) -> Result<(), String> {
         }
         Err(error) => state.status.visibility_error = Some(error),
     }
-    let lock_ready = state.status.lock_registered;
+    let lock_ready = state.status.lock_registered && tray::available(app.handle());
+    if !tray::available(app.handle()) {
+        state.status.lock_error = Some("System tray is unavailable; lock mode is disabled.".into());
+    }
     let lock_error = state.status.lock_error.clone();
     drop(state);
     window_control::set_recovery_ready(app.handle(), lock_ready)?;
     if let Some(error) = lock_error {
         tray::set_lock_error(app.handle(), &error).map_err(|error| error.to_string())?;
     }
-    if config.window.locked && lock_ready {
-        if let Err(error) = window_control::toggle_lock(app.handle()) {
-            eprintln!("could not restore lock state: {error}");
-        }
+    Ok(())
+}
+
+pub fn restore_lock(app: &AppHandle) -> Result<(), String> {
+    let config = app
+        .state::<Arc<AppState>>()
+        .config
+        .get()
+        .map_err(|error| error.to_string())?;
+    if config.window.locked && status(app)?.lock_registered && tray::available(app) {
+        window_control::toggle_lock(app)?;
     }
     Ok(())
 }
@@ -161,7 +171,11 @@ pub fn change(app: &AppHandle, action_name: &str, new_key: &str) -> Result<Short
         Action::Lock => {
             state.lock = Some(new_key.into());
             state.status.lock_registered = true;
-            state.status.lock_error = None;
+            state.status.lock_error = if tray::available(app) {
+                None
+            } else {
+                Some("System tray is unavailable; lock mode is disabled.".into())
+            };
         }
         Action::Visibility => {
             state.visibility = Some(new_key.into());

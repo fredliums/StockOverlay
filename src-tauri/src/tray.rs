@@ -41,11 +41,7 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                     Ok(())
                 }
                 EXIT => {
-                    if let Err(error) = crate::window_placement::save_current(app) {
-                        eprintln!("could not save final window placement: {error}");
-                    }
-                    crate::shortcuts::unregister_all(app);
-                    app.exit(0);
+                    exit_app(app);
                     Ok(())
                 }
                 _ => Ok(()),
@@ -64,6 +60,23 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
         settings_open_lock: Mutex::new(()),
     });
     Ok(())
+}
+
+pub(crate) fn available(app: &AppHandle) -> bool {
+    app.try_state::<TrayState>().is_some()
+}
+
+pub(crate) fn exit_app(app: &AppHandle) {
+    if let Some(service) = app.try_state::<std::sync::Arc<
+        crate::service::QuoteService<crate::provider::TencentQuoteProvider>,
+    >>() {
+        service.stop();
+    }
+    if let Err(error) = crate::window_placement::save_current(app) {
+        eprintln!("could not save final window placement: {error}");
+    }
+    crate::shortcuts::unregister_all(app);
+    app.exit(0);
 }
 
 pub(crate) fn set_lock_menu(app: &AppHandle, available: bool, locked: bool) -> tauri::Result<()> {
