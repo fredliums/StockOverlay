@@ -62,6 +62,7 @@ pub fn run() {
             commands::get_quote_snapshot,
             commands::get_window_mode,
             commands::open_settings,
+            commands::set_content_min_size,
             commands::get_shortcut_status,
             commands::change_shortcut,
             commands::search_stocks,

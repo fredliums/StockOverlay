@@ -24,6 +24,8 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
   color: rgb(246 248 250 / var(--text-opacity));
   font-size: var(--quote-font-size);
   overflow: auto;
+  display: flex;
+  flex-direction: column;
   user-select: none;
 }
 
@@ -40,6 +42,12 @@ html, body, #root { width: 100%; height: 100%; margin: 0; background: transparen
 .overlay__resize { position: absolute; right: 0; bottom: 0; width: 20px; height: 20px; cursor: nwse-resize; }
 .overlay__resize::after { content: ''; position: absolute; right: 5px; bottom: 5px; width: 8px; height: 8px; border-right: 2px solid #9cabbd; border-bottom: 2px solid #9cabbd; }
 
+.stock-pages { position: relative; display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.stock-pages__edit { flex: 1; min-height: 0; overflow: auto; }
+.stock-pages--locked .stock-pages__edit { position: absolute; width: 100%; height: 100%; visibility: hidden; pointer-events: none; }
+.stock-pages__viewport { flex: 1; min-height: 0; overflow: hidden; }
+.stock-pages__indicator { flex: none; margin-top: 3px; text-align: center; color: rgb(183 194 210 / var(--text-opacity)); font-size: .65em; }
+.stock-pages__measure { position: absolute; inset: 0 0 auto 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
 .stock-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
 .stock-list__empty { margin-top: 12px; color: rgb(183 194 210 / var(--text-opacity)); font-size: .75em; }
 .stock-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; padding: 7px 9px; border: 1px solid rgba(185, 202, 222, .2); border-radius: 6px; }

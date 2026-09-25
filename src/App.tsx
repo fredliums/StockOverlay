@@ -1,8 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { appStore } from './appStore';
-import { StockList } from './components/StockList';
+import { PaginatedStockList } from './components/PaginatedStockList';
 import { WatchlistSettings } from './components/WatchlistSettings';
 import { AppearanceSettings, DisplaySettings, QuoteSettings } from './components/DisplaySettings';
 import { ShortcutSettings, type ShortcutStatus } from './components/ShortcutSettings';
@@ -73,6 +73,8 @@ function SettingsShell() {
 function OverlayApp() {
   const { config, snapshot, watchlist, locked, error } = useAppState();
   const [windowError, setWindowError] = useState<string | null>(null);
+  const overlayRef = useRef<HTMLElement>(null);
+  const lastMinimum = useRef('');
   const appearance = config ? {
     '--quote-font-size': `${config.display.fontSize}px`,
     '--background-opacity': config.display.backgroundOpacity,
@@ -80,6 +82,38 @@ function OverlayApp() {
     '--rise-rgb': config.display.redForRise ? '255 105 98' : '74 207 142',
     '--fall-rgb': config.display.redForRise ? '74 207 142' : '255 105 98',
   } as CSSProperties : undefined;
+
+  useLayoutEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    let frame = 0;
+    const measure = () => {
+      const atomic = overlay.querySelectorAll<HTMLElement>(
+        '.quote-field, .order-book__row, .stock-card__identity > *, .stock-card__status',
+      );
+      const widest = Math.max(0, ...Array.from(atomic, (item) => item.scrollWidth));
+      const tallest = Math.max(0, ...Array.from(atomic, (item) => item.getBoundingClientRect().height));
+      const identity = overlay.querySelector<HTMLElement>('.stock-card__identity');
+      const toolbar = overlay.querySelector<HTMLElement>('.overlay__toolbar');
+      const status = overlay.querySelector<HTMLElement>('.overlay__status');
+      const width = Math.ceil(widest + 54);
+      const height = Math.ceil(64 + (toolbar?.offsetHeight ?? 0) + (status?.offsetHeight ?? 0)
+        + (identity?.offsetHeight ?? 0) + tallest);
+      const key = `${width}:${height}`;
+      if (key === lastMinimum.current) return;
+      lastMinimum.current = key;
+      invoke('set_content_min_size', { width, height }).catch((reason: unknown) => {
+        setWindowError(`设置最小尺寸失败：${errorMessage(reason)}`);
+      });
+    };
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
+    observer.observe(overlay);
+    frame = requestAnimationFrame(measure);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [config, snapshot, watchlist, locked]);
 
   const startDrag = () => {
     getCurrentWindow().startDragging().catch((reason: unknown) => {
@@ -98,7 +132,7 @@ function OverlayApp() {
     : '正在加载配置…';
 
   return (
-    <main className="overlay" style={appearance}>
+    <main className="overlay" ref={overlayRef} style={appearance}>
       {!locked && <header className="overlay__toolbar">
         <div
           className="overlay__drag"
@@ -119,7 +153,7 @@ function OverlayApp() {
       </header>}
       <div className="overlay__status">{status}</div>
       {(windowError || error) && <div className="overlay__error" role="alert">{windowError || error}</div>}
-      {config && <StockList config={config} snapshot={snapshot} watchlist={watchlist} />}
+      {config && <PaginatedStockList config={config} snapshot={snapshot} watchlist={watchlist} locked={locked} />}
       {!locked && <div
         className="overlay__resize"
         title="调整窗口大小"

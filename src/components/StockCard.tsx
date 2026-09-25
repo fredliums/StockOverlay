@@ -1,7 +1,7 @@
 import type { DisplayConfig } from '../types/config';
 import type { Quote, QuoteStatus } from '../types/quote';
 import type { StockEntry } from '../types/stock';
-import { QuoteFields } from './QuoteFields';
+import { QuoteFields, quoteFields } from './QuoteFields';
 import { OrderBook } from './OrderBook';
 
 function statusText(status: QuoteStatus | null, quote: Quote | null): string | null {
@@ -21,18 +21,24 @@ export function StockCard({
   quote,
   status,
   display,
+  range,
 }: {
   code: string;
   entry: StockEntry | null;
   quote: Quote | null;
   status: QuoteStatus | null;
   display: DisplayConfig;
+  range?: { start: number; end: number };
 }) {
   const market = code.slice(0, 2).toUpperCase();
   const symbol = code.slice(2);
   const name = quote?.name || entry?.name || `${market} ${symbol}`;
   const showIdentity = display.showName || display.showCode;
   const message = statusText(status, quote);
+  const fieldCount = quoteFields(quote, display).length;
+  const bookCount = display.orderBookDepth === 3 || display.orderBookDepth === 5
+    ? display.orderBookDepth * 2 : 0;
+  const statusIndex = fieldCount + bookCount;
   const direction = (quote?.change ?? quote?.changePercent ?? 0) > 0
     ? 'rise' : (quote?.change ?? quote?.changePercent ?? 0) < 0 ? 'fall' : 'flat';
   return <section className="stock-card" data-direction={direction} aria-label={`${name} ${market} ${symbol}`}>
@@ -40,9 +46,10 @@ export function StockCard({
       {(display.showName || !showIdentity) && <strong>{name}</strong>}
       {display.showCode && <span className="stock-card__code">{market} {symbol}</span>}
     </div>
-    <QuoteFields quote={quote} display={display} />
+    <QuoteFields quote={quote} display={display} range={range} />
     {(display.orderBookDepth === 3 || display.orderBookDepth === 5) &&
-      <OrderBook quote={quote} depth={display.orderBookDepth} />}
-    {message && <div className={`stock-card__status stock-card__status--${status?.state ?? 'loading'}`}>{message}</div>}
+      <OrderBook quote={quote} depth={display.orderBookDepth} atomOffset={fieldCount} range={range} />}
+    {message && (!range || (statusIndex >= range.start && statusIndex < range.end)) &&
+      <div className={`stock-card__status stock-card__status--${status?.state ?? 'loading'}`} data-atom-index={statusIndex}>{message}</div>}
   </section>;
 }

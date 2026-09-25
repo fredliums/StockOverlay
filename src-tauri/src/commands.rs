@@ -292,6 +292,22 @@ pub fn get_watchlist_entries(
         .collect())
 }
 
+#[tauri::command]
+pub fn set_content_min_size(
+    window: WebviewWindow,
+    width: u32,
+    height: u32,
+) -> Result<(), CommandError> {
+    if window.label() != "main" {
+        return Err(CommandError::new(
+            "unauthorized",
+            "Only the overlay can set its minimum size.",
+        ));
+    }
+    crate::window_placement::set_content_min_size(&window.app_handle(), width, height)
+        .map_err(|error| CommandError::new("window_size", error))
+}
+
 fn add_stock_to_state(
     state: &AppState,
     code: &str,

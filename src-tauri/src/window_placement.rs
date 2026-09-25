@@ -1,7 +1,7 @@
 use crate::commands::AppState;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 use std::time::Duration;
 use tauri::{App, AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize};
@@ -12,6 +12,7 @@ const MONITOR_CHECK: Duration = Duration::from_secs(5);
 #[derive(Default)]
 pub struct PlacementState {
     generation: AtomicU64,
+    content_minimum: Mutex<(u32, u32)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -182,12 +183,35 @@ fn apply_bounds(window: &tauri::WebviewWindow, bounds: Rect, work: Rect) -> Resu
 
 fn update_min_size(window: &tauri::WebviewWindow, work: Rect) -> Result<(), String> {
     let scale = window.scale_factor().map_err(|error| error.to_string())?;
+    let (content_width, content_height) = *window
+        .state::<PlacementState>()
+        .content_minimum
+        .lock()
+        .map_err(|_| "Window content minimum is unavailable.".to_string())?;
     window
         .set_min_size(Some(LogicalSize::new(
-            240.0_f64.min(work.width as f64 / scale),
-            80.0_f64.min(work.height as f64 / scale),
+            (240.0_f64.max(content_width as f64)).min(work.width as f64 / scale),
+            (80.0_f64.max(content_height as f64)).min(work.height as f64 / scale),
         )))
         .map_err(|error| error.to_string())
+}
+
+pub fn set_content_min_size(app: &AppHandle, width: u32, height: u32) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "Main window is unavailable.".to_string())?;
+    let Some(monitor) = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+    else {
+        return Ok(());
+    };
+    *app.state::<PlacementState>()
+        .content_minimum
+        .lock()
+        .map_err(|_| "Window content minimum is unavailable.".to_string())? =
+        (width.min(4_096), height.min(2_160));
+    update_min_size(&window, work_rect(&monitor))
 }
 
 pub fn schedule_save(app: &AppHandle) {

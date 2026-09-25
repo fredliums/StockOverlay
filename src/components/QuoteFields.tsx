@@ -14,8 +14,8 @@ import { CompactLevel1 } from './OrderBook';
 
 type Field = { key: string; label: string; value: string };
 
-export function QuoteFields({ quote, display }: { quote: Quote | null; display: DisplayConfig }) {
-  const fields: Field[] = [
+export function quoteFields(quote: Quote | null, display: DisplayConfig): Field[] {
+  return [
     ...(display.showPrice ? [{ key: 'price', label: '现', value: formatPrice(quote?.price) }] : []),
     ...(display.showChange ? [{ key: 'change', label: '涨跌', value: formatChange(quote?.change) }] : []),
     ...(display.showChangePercent ? [{ key: 'changePercent', label: '涨跌幅', value: formatChangePercent(quote?.changePercent) }] : []),
@@ -26,13 +26,29 @@ export function QuoteFields({ quote, display }: { quote: Quote | null; display: 
     ...(display.showPE ? [{ key: 'pe', label: 'PE', value: formatPE(quote?.pe) }] : []),
     ...(display.showVolumeRatio ? [{ key: 'volumeRatio', label: '量比', value: formatVolumeRatio(quote?.volumeRatio) }] : []),
     ...(display.showOrderRatio ? [{ key: 'orderRatio', label: '委比', value: formatOrderRatio(quote?.orderRatio) }] : []),
+    ...(display.orderBookDepth === 1 ? [{ key: 'level1', label: '', value: '' }] : []),
   ];
+}
 
+export function QuoteFields({
+  quote,
+  display,
+  range,
+}: {
+  quote: Quote | null;
+  display: DisplayConfig;
+  range?: { start: number; end: number };
+}) {
+  const fields = quoteFields(quote, display);
+  const visible = fields.map((field, index) => ({ field, index }))
+    .filter(({ index }) => !range || (index >= range.start && index < range.end));
+  if (visible.length === 0) return null;
   return <div className="quote-fields">
-    {fields.map((field) => <span className={`quote-field quote-field--${field.key}`} key={field.key}>
+    {visible.map(({ field, index }) => field.key === 'level1'
+      ? <CompactLevel1 key={field.key} quote={quote} atomIndex={index} />
+      : <span className={`quote-field quote-field--${field.key}`} data-atom-index={index} key={field.key}>
       <span className="quote-field__label">{field.label}</span>
       <span className="quote-field__value">{field.value}</span>
     </span>)}
-    {display.orderBookDepth === 1 && <CompactLevel1 quote={quote} />}
   </div>;
 }
