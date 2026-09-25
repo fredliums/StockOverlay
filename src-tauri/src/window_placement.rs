@@ -38,12 +38,12 @@ impl Rect {
         width as u64 * height as u64
     }
 
-    fn recover(self, work: Self) -> Self {
-        let (visible_width, visible_height) = self.visible_size(work);
+    fn recover(self, work: Self, screen: Self) -> Self {
+        let (visible_width, visible_height) = self.visible_size(screen);
         if self.width <= work.width
             && self.height <= work.height
-            && visible_width >= 48
-            && visible_height >= 48
+            && visible_width >= 32
+            && visible_height >= 24
         {
             self
         } else {
@@ -79,17 +79,27 @@ fn work_rect(monitor: &tauri::Monitor) -> Rect {
     }
 }
 
-fn best_work_area(bounds: Rect, monitors: &[tauri::Monitor], primary: &tauri::Monitor) -> Rect {
+fn screen_rect(monitor: &tauri::Monitor) -> Rect {
+    let position = monitor.position();
+    let size = monitor.size();
+    Rect {
+        x: position.x,
+        y: position.y,
+        width: size.width,
+        height: size.height,
+    }
+}
+
+fn best_monitor<'a>(
+    bounds: Rect,
+    monitors: &'a [tauri::Monitor],
+    primary: &'a tauri::Monitor,
+) -> &'a tauri::Monitor {
     monitors
         .iter()
-        .map(work_rect)
-        .filter_map(|work| {
-            let area = bounds.intersection_area(work);
-            (area > 0).then_some((area, work))
-        })
-        .max_by_key(|(area, _)| *area)
-        .map(|(_, work)| work)
-        .unwrap_or_else(|| work_rect(primary))
+        .max_by_key(|monitor| bounds.intersection_area(screen_rect(monitor)))
+        .filter(|monitor| bounds.intersection_area(screen_rect(monitor)) > 0)
+        .unwrap_or(primary)
 }
 
 fn primary_scale(window: &tauri::WebviewWindow) -> tauri::Result<f64> {
@@ -154,8 +164,9 @@ fn restore_from_config(app: &AppHandle) -> Result<(), String> {
         width: (config.window.width as f64 * scale).round() as u32,
         height: (config.window.height as f64 * scale).round() as u32,
     };
-    let work = best_work_area(requested, &monitors, &primary);
-    apply_bounds(&window, requested.recover(work), work)
+    let monitor = best_monitor(requested, &monitors, &primary);
+    let work = work_rect(monitor);
+    apply_bounds(&window, requested.recover(work, screen_rect(monitor)), work)
 }
 
 pub fn ensure_visible(app: &AppHandle) -> Result<(), String> {
@@ -179,8 +190,9 @@ pub fn ensure_visible(app: &AppHandle) -> Result<(), String> {
         width: size.width,
         height: size.height,
     };
-    let work = best_work_area(current, &monitors, &primary);
-    let corrected = current.recover(work);
+    let monitor = best_monitor(current, &monitors, &primary);
+    let work = work_rect(monitor);
+    let corrected = current.recover(work, screen_rect(monitor));
     if corrected != current {
         apply_bounds(&window, corrected, work)?;
         schedule_save(app);
@@ -302,15 +314,19 @@ mod tests {
             width: 2560,
             height: 1392,
         };
+        let screen = Rect {
+            height: 1440,
+            ..work
+        };
         let bottom = Rect {
             x: 789,
-            y: 1205,
+            y: 1392,
             width: 835,
             height: 235,
         };
-        assert_eq!(bottom.recover(work), bottom);
+        assert_eq!(bottom.recover(work, screen), bottom);
         assert_eq!(
-            Rect { y: 1370, ..bottom }.recover(work),
+            Rect { y: 1420, ..bottom }.recover(work, screen),
             Rect { y: 1157, ..bottom }
         );
     }
