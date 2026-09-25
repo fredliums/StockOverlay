@@ -1,5 +1,6 @@
 mod commands;
 pub mod config;
+pub mod provider;
 pub mod quote;
 pub mod tencent;
 use tauri::Manager;

@@ -15,15 +15,15 @@ pub fn parse_response(bytes: &[u8], requested: &[Symbol]) -> QuoteBatchResult {
     }
     let records = split_records(&decoded);
     let invalid_marker = records.contains_key("pv_none_match");
+    let missing_count = requested
+        .iter()
+        .filter(|symbol| !records.contains_key(&response_key(symbol)))
+        .count();
     for symbol in requested {
-        let key = format!(
-            "{}{}",
-            symbol.market.as_str().to_ascii_lowercase(),
-            symbol.code
-        );
+        let key = response_key(symbol);
         let outcome = match records.get(&key) {
             Some(payload) => parse_quote(symbol, payload),
-            None if invalid_marker && requested.len() == 1 => Err(QuoteFailureKind::InvalidSymbol),
+            None if invalid_marker && missing_count == 1 => Err(QuoteFailureKind::InvalidSymbol),
             None => Err(QuoteFailureKind::MissingRecord),
         };
         match outcome {
@@ -35,6 +35,14 @@ pub fn parse_response(bytes: &[u8], requested: &[Symbol]) -> QuoteBatchResult {
         }
     }
     result
+}
+
+pub(crate) fn response_key(symbol: &Symbol) -> String {
+    format!(
+        "{}{}",
+        symbol.market.as_str().to_ascii_lowercase(),
+        symbol.code
+    )
 }
 
 fn fail_all(requested: &[Symbol], kind: QuoteFailureKind) -> QuoteBatchResult {
