@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings-capability",
+  "description": "Core access for the StockOverlay settings window",
+  "windows": ["settings"],
+  "permissions": ["core:default"]
+}

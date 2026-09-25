@@ -42,3 +42,10 @@ export interface ShortcutConfig {
   toggleLock: string;
   toggleVisibility: string;
 }
+
+/** Only changed fields are sent; Rust merges them with its current config. */
+export interface ConfigPatch {
+  window?: Partial<Omit<WindowConfig, 'locked'>>;
+  display?: Partial<DisplayConfig>;
+  refreshInterval?: AppConfig['refreshInterval'];
+}
