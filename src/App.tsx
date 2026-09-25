@@ -5,6 +5,7 @@ import { appStore } from './appStore';
 import { StockList } from './components/StockList';
 import { WatchlistSettings } from './components/WatchlistSettings';
 import { AppearanceSettings, DisplaySettings, QuoteSettings } from './components/DisplaySettings';
+import { ShortcutSettings, type ShortcutStatus } from './components/ShortcutSettings';
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -21,11 +22,6 @@ export default function App() {
   useEffect(() => appStore.connect(), []);
   return getCurrentWindow().label === 'settings' ? <SettingsShell /> : <OverlayApp />;
 }
-
-type ShortcutStatus = {
-  lockError: string | null;
-  visibilityError: string | null;
-};
 
 type SettingsTab = 'watchlist' | 'display' | 'appearance' | 'shortcuts' | 'quotes';
 const settingsTabs: { id: SettingsTab; label: string }[] = [
@@ -65,7 +61,7 @@ function SettingsShell() {
         {config && tab === 'display' && <DisplaySettings config={config} />}
         {config && tab === 'appearance' && <AppearanceSettings config={config} />}
         {config && tab === 'quotes' && <QuoteSettings config={config} />}
-        {config && tab === 'shortcuts' && <p>快捷键设置将在下一步完成。</p>}
+        {config && tab === 'shortcuts' && <ShortcutSettings config={config} status={shortcuts} onStatusChange={setShortcuts} />}
       </section>
       {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
       {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}
