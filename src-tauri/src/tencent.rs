@@ -1,4 +1,4 @@
-use crate::quote::{Quote, QuoteBatchResult, QuoteFailure, QuoteFailureKind, Symbol};
+use crate::quote::{OrderLevel, Quote, QuoteBatchResult, QuoteFailure, QuoteFailureKind, Symbol};
 use chrono::{FixedOffset, NaiveDateTime, TimeZone};
 use encoding_rs::GBK;
 use std::collections::HashMap;
@@ -82,6 +82,9 @@ fn parse_quote(symbol: &Symbol, payload: &str) -> Result<Quote, QuoteFailureKind
         let yuan = value * 10_000.0;
         yuan.is_finite().then_some(yuan)
     });
+    let bid_levels = order_levels(&fields, 9);
+    let ask_levels = order_levels(&fields, 19);
+    let order_ratio = order_ratio(&bid_levels, &ask_levels);
 
     Ok(Quote {
         symbol: symbol.code.clone(),
@@ -97,11 +100,42 @@ fn parse_quote(symbol: &Symbol, payload: &str) -> Result<Quote, QuoteFailureKind
         turnover_rate: number(&fields, 38),
         pe: number(&fields, 39),
         volume_ratio: number(&fields, 49),
-        order_ratio: None,
-        bid_levels: Vec::new(),
-        ask_levels: Vec::new(),
+        order_ratio,
+        bid_levels,
+        ask_levels,
         timestamp: field(&fields, 30).and_then(parse_beijing_time),
     })
+}
+
+fn order_levels(fields: &[&str], first_price_index: usize) -> Vec<OrderLevel> {
+    (0..5)
+        .map(|level| {
+            let price_index = first_price_index + level * 2;
+            OrderLevel {
+                price: number(fields, price_index).filter(|price| *price > 0.0),
+                volume_lots: field(fields, price_index + 1)
+                    .and_then(|value| value.parse::<u64>().ok()),
+            }
+        })
+        .collect()
+}
+
+fn order_ratio(bids: &[OrderLevel], asks: &[OrderLevel]) -> Option<f64> {
+    if bids.len() != 5 || asks.len() != 5 {
+        return None;
+    }
+    let sum_lots = |levels: &[OrderLevel]| {
+        levels.iter().try_fold(0u128, |sum, level| {
+            Some(sum + u128::from(level.volume_lots?))
+        })
+    };
+    let bid_lots = sum_lots(bids)?;
+    let ask_lots = sum_lots(asks)?;
+    let total = bid_lots + ask_lots;
+    if total == 0 {
+        return None;
+    }
+    Some((bid_lots as f64 - ask_lots as f64) * 100.0 / total as f64)
 }
 
 fn field<'a>(fields: &'a [&str], index: usize) -> Option<&'a str> {
@@ -232,5 +266,75 @@ mod tests {
             parse_beijing_time("20260924161444"),
             Some(1_790_237_684_000)
         );
+    }
+
+    #[test]
+    fn parses_five_levels_and_calculates_order_ratio_from_lots() {
+        for (market, code, bytes, bid_one, ask_one, bid_five, ask_five, expected_ratio) in [
+            (
+                Market::SH,
+                "600519",
+                &include_bytes!("../tests/fixtures/tencent/sh600519.gbk")[..],
+                (1237.0, 13),
+                (1237.05, 1),
+                (1236.51, 2),
+                (1237.97, 1),
+                (21.0 - 5.0) * 100.0 / 26.0,
+            ),
+            (
+                Market::BJ,
+                "920021",
+                &include_bytes!("../tests/fixtures/tencent/bj920021.gbk")[..],
+                (7.86, 596),
+                (7.87, 49),
+                (7.82, 113),
+                (7.91, 43),
+                (1651.0 - 1468.0) * 100.0 / 3119.0,
+            ),
+        ] {
+            let result = parse_response(bytes, &[symbol(market, code)]);
+            let quote = &result.quotes[0];
+            assert_eq!(quote.bid_levels.len(), 5);
+            assert_eq!(quote.ask_levels.len(), 5);
+            assert_eq!(quote.bid_levels[0].price, Some(bid_one.0));
+            assert_eq!(quote.bid_levels[0].volume_lots, Some(bid_one.1));
+            assert_eq!(quote.ask_levels[0].price, Some(ask_one.0));
+            assert_eq!(quote.ask_levels[0].volume_lots, Some(ask_one.1));
+            assert_eq!(quote.bid_levels[4].price, Some(bid_five.0));
+            assert_eq!(quote.bid_levels[4].volume_lots, Some(bid_five.1));
+            assert_eq!(quote.ask_levels[4].price, Some(ask_five.0));
+            assert_eq!(quote.ask_levels[4].volume_lots, Some(ask_five.1));
+            assert!((quote.order_ratio.unwrap() - expected_ratio).abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn missing_or_zero_total_lots_do_not_produce_an_order_ratio() {
+        let mut fields = vec![""; 29];
+        fields[1] = "Sample";
+        fields[2] = "600519";
+        fields[3] = "10";
+        fields[4] = "9";
+        for level in 0..5 {
+            fields[9 + level * 2] = "9.9";
+            fields[10 + level * 2] = "0";
+            fields[19 + level * 2] = "10.1";
+            fields[20 + level * 2] = "0";
+        }
+        let response = format!("v_sh600519=\"{}\";", fields.join("~"));
+        let quote = &parse_response(response.as_bytes(), &[symbol(Market::SH, "600519")]).quotes[0];
+        assert_eq!(quote.order_ratio, None);
+        assert_eq!(quote.bid_levels[0].volume_lots, Some(0));
+
+        fields[10] = "5";
+        fields[20] = "3";
+        fields[28] = "";
+        fields[19] = "";
+        let response = format!("v_sh600519=\"{}\";", fields.join("~"));
+        let quote = &parse_response(response.as_bytes(), &[symbol(Market::SH, "600519")]).quotes[0];
+        assert_eq!(quote.ask_levels[0].price, None);
+        assert_eq!(quote.ask_levels[0].volume_lots, Some(3));
+        assert_eq!(quote.ask_levels[4].volume_lots, None);
+        assert_eq!(quote.order_ratio, None);
     }
 }
