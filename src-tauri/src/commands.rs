@@ -1,6 +1,7 @@
 use crate::{
     config::{AppConfig, ConfigStore},
     quote::{QuoteSnapshot, QuoteState, QuoteStatus, Symbol},
+    stock_index::{self, StockEntry},
 };
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -207,6 +208,15 @@ pub fn get_quote_snapshot(
         .lock()
         .map(|snapshot| snapshot.clone())
         .map_err(|_| CommandError::new("quote_state", "Quote state is unavailable."))
+}
+
+#[tauri::command]
+pub fn search_stocks(
+    window: WebviewWindow,
+    query: String,
+) -> Result<Vec<StockEntry>, CommandError> {
+    require_app_window(&window)?;
+    Ok(stock_index::search(&query))
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ pub mod config;
 pub mod provider;
 pub mod quote;
 mod service;
+pub mod stock_index;
 pub mod tencent;
 use std::sync::Arc;
 use tauri::Manager;
@@ -24,7 +25,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::load_config,
             commands::save_config,
-            commands::get_quote_snapshot
+            commands::get_quote_snapshot,
+            commands::search_stocks
         ])
         .run(tauri::generate_context!())
         .expect("failed to run StockOverlay");
