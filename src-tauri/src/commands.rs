@@ -198,10 +198,18 @@ pub fn save_config(
     patch: ConfigPatch,
 ) -> Result<AppConfig, CommandError> {
     require_app_window(&window)?;
-    state
+    let config = state
         .config
         .update(|config| patch.apply(config))
-        .map_err(|error| CommandError::new("config_save", error.to_string()))
+        .map_err(|error| CommandError::new("config_save", error.to_string()))?;
+    publish_config_change(&window, &config);
+    Ok(config)
+}
+
+pub(crate) fn publish_config_change(window: &WebviewWindow, config: &AppConfig) {
+    if let Err(error) = window.emit("config:update", config.clone()) {
+        eprintln!("could not emit config update: {error}");
+    }
 }
 
 #[tauri::command]
@@ -240,8 +248,12 @@ pub fn change_shortcut(
     key: String,
 ) -> Result<crate::shortcuts::ShortcutStatus, CommandError> {
     require_app_window(&window)?;
-    crate::shortcuts::change(&window.app_handle(), &action, &key)
-        .map_err(|error| CommandError::new("shortcut_change", error))
+    let status = crate::shortcuts::change(&window.app_handle(), &action, &key)
+        .map_err(|error| CommandError::new("shortcut_change", error))?;
+    if let Ok(config) = window.state::<Arc<AppState>>().config.get() {
+        publish_config_change(&window, &config);
+    }
+    Ok(status)
 }
 
 #[tauri::command]
@@ -408,6 +420,7 @@ pub fn add_stock(
     require_app_window(&window)?;
     let (config, snapshot) = add_stock_to_state(&state, &code)?;
     publish_watchlist_change(&window, &service, snapshot);
+    publish_config_change(&window, &config);
     Ok(config)
 }
 
@@ -421,6 +434,7 @@ pub fn remove_stock(
     require_app_window(&window)?;
     let (config, snapshot) = remove_stock_from_state(&state, &code)?;
     publish_watchlist_change(&window, &service, snapshot);
+    publish_config_change(&window, &config);
     Ok(config)
 }
 
@@ -434,6 +448,7 @@ pub fn reorder_stocks(
     require_app_window(&window)?;
     let (config, snapshot) = reorder_stocks_in_state(&state, codes)?;
     publish_watchlist_change(&window, &service, snapshot);
+    publish_config_change(&window, &config);
     Ok(config)
 }
 

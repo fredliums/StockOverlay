@@ -62,7 +62,8 @@ pub fn toggle_lock(app: &AppHandle) -> Result<bool, String> {
         tray::set_lock_menu(app, state.recovery_ready, false).map_err(|error| error.to_string())?;
         app.emit("window:mode", false)
             .map_err(|error| error.to_string())?;
-        saved.map_err(|error| error.to_string())?;
+        let saved = saved.map_err(|error| error.to_string())?;
+        let _ = app.emit("config:update", saved);
         Ok(false)
     } else {
         if !state.recovery_ready {
@@ -78,12 +79,15 @@ pub fn toggle_lock(app: &AppHandle) -> Result<bool, String> {
             let _ = window.show();
             return Err(format!("Could not enable click-through: {error}"));
         }
-        if let Err(error) = config.config.update(|current| current.window.locked = true) {
-            let _ = window.set_ignore_cursor_events(false);
-            let _ = window.set_resizable(true);
-            let _ = window.show();
-            return Err(format!("Could not save lock state: {error}"));
-        }
+        let saved = match config.config.update(|current| current.window.locked = true) {
+            Ok(saved) => saved,
+            Err(error) => {
+                let _ = window.set_ignore_cursor_events(false);
+                let _ = window.set_resizable(true);
+                let _ = window.show();
+                return Err(format!("Could not save lock state: {error}"));
+            }
+        };
         state.locked = true;
         if let Err(error) = tray::set_lock_menu(app, true, true)
             .map_err(|error| error.to_string())
@@ -103,6 +107,7 @@ pub fn toggle_lock(app: &AppHandle) -> Result<bool, String> {
             let _ = window.show();
             return Err(format!("Could not publish lock state: {error}"));
         }
+        let _ = app.emit("config:update", saved);
         Ok(true)
     }
 }

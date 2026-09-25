@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
-use tauri::{App, AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{App, AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize};
 
 const SAVE_DELAY: Duration = Duration::from_millis(650);
 const MONITOR_CHECK: Duration = Duration::from_secs(5);
@@ -233,7 +233,7 @@ pub(crate) fn save_current(app: &AppHandle) -> Result<(), String> {
     {
         return Ok(());
     }
-    config
+    let updated = config
         .update(|config| {
             config.window.x = x;
             config.window.y = y;
@@ -241,6 +241,9 @@ pub(crate) fn save_current(app: &AppHandle) -> Result<(), String> {
             config.window.height = height;
         })
         .map_err(|error| error.to_string())?;
+    if let Err(error) = app.emit("config:update", updated) {
+        eprintln!("could not emit window placement update: {error}");
+    }
     Ok(())
 }
 

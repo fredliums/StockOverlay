@@ -1,10 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { useEffect, useState } from 'react';
-import type { AppConfig } from './types/config';
-import type { QuoteSnapshot } from './types/quote';
-import { acceptNewerSnapshot } from './snapshot';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { appStore } from './appStore';
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -13,11 +10,13 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+function useAppState() {
+  return useSyncExternalStore(appStore.subscribe, appStore.getState);
+}
+
 export default function App() {
-  if (getCurrentWindow().label === 'settings') {
-    return <SettingsShell />;
-  }
-  return <OverlayApp />;
+  useEffect(() => appStore.connect(), []);
+  return getCurrentWindow().label === 'settings' ? <SettingsShell /> : <OverlayApp />;
 }
 
 type ShortcutStatus = {
@@ -26,51 +25,29 @@ type ShortcutStatus = {
 };
 
 function SettingsShell() {
-  const [status, setStatus] = useState<ShortcutStatus | null>(null);
+  const { config, snapshot, error } = useAppState();
+  const [shortcuts, setShortcuts] = useState<ShortcutStatus | null>(null);
   useEffect(() => {
-    invoke<ShortcutStatus>('get_shortcut_status').then(setStatus).catch(() => {});
+    let active = true;
+    invoke<ShortcutStatus>('get_shortcut_status')
+      .then((status) => { if (active) setShortcuts(status); })
+      .catch(() => {});
+    return () => { active = false; };
   }, []);
   return (
     <main className="settings-shell">
       <h1>StockOverlay 设置</h1>
-      {status?.lockError && <p role="alert">锁定快捷键不可用：{status.lockError}</p>}
-      {status?.visibilityError && <p role="alert">显示快捷键不可用：{status.visibilityError}</p>}
+      {config && snapshot && <p>{config.stocks.length} 只自选股 · {snapshot.quotes.length} 条行情</p>}
+      {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
+      {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}
+      {error && <p role="alert">{error}</p>}
     </main>
   );
 }
 
 function OverlayApp() {
-  const [config, setConfig] = useState<AppConfig | null>(null);
-  const [snapshot, setSnapshot] = useState<QuoteSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { config, snapshot, locked, error } = useAppState();
   const [windowError, setWindowError] = useState<string | null>(null);
-  const [locked, setLocked] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    let stopMode: (() => void) | undefined;
-    let stopError: (() => void) | undefined;
-    listen<boolean>('window:mode', (event) => {
-      if (active) setLocked(event.payload);
-    }).then((stop) => {
-      if (!active) {
-        stop();
-        return;
-      }
-      stopMode = stop;
-      invoke<boolean>('get_window_mode')
-        .then((mode) => { if (active) setLocked(mode); })
-        .catch((reason: unknown) => { if (active) setWindowError(errorMessage(reason)); });
-    }).catch((reason: unknown) => { if (active) setWindowError(errorMessage(reason)); });
-    listen<string>('window:error', (event) => {
-      if (active) setWindowError(event.payload);
-    }).then((stop) => { if (active) stopError = stop; else stop(); });
-    return () => {
-      active = false;
-      stopMode?.();
-      stopError?.();
-    };
-  }, []);
 
   const startDrag = () => {
     getCurrentWindow().startDragging().catch((reason: unknown) => {
@@ -84,59 +61,9 @@ function OverlayApp() {
     });
   };
 
-  useEffect(() => {
-    let active = true;
-    let unlisten: (() => void) | undefined;
-    const acceptSnapshot = (next: QuoteSnapshot) => {
-      if (active) {
-        setSnapshot((current) => acceptNewerSnapshot(current, next));
-      }
-    };
-    const readSnapshot = () => {
-      invoke<QuoteSnapshot>('get_quote_snapshot')
-        .then(acceptSnapshot)
-        .catch((reason: unknown) => {
-          if (active) setError(errorMessage(reason));
-        });
-    };
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') readSnapshot();
-    };
-
-    listen<QuoteSnapshot>('quote:update', (event) => acceptSnapshot(event.payload))
-      .then((stop) => {
-        if (!active) {
-          stop();
-          return;
-        }
-        unlisten = stop;
-        document.addEventListener('visibilitychange', onVisible);
-        window.addEventListener('focus', readSnapshot);
-        readSnapshot();
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(errorMessage(reason));
-      });
-    invoke<AppConfig>('load_config')
-      .then((loaded) => {
-        if (active) setConfig(loaded);
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(errorMessage(reason));
-      });
-    return () => {
-      active = false;
-      unlisten?.();
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('focus', readSnapshot);
-    };
-  }, []);
-
-  const status = error
-    ? `加载失败：${error}`
-    : config && snapshot
-      ? `${config.stocks.length} 只自选股 · ${snapshot.quotes.length} 条行情`
-      : '正在加载配置…';
+  const status = config && snapshot
+    ? `${config.stocks.length} 只自选股 · ${snapshot.quotes.length} 条行情`
+    : '正在加载配置…';
 
   return (
     <main className="overlay">
@@ -154,7 +81,7 @@ function OverlayApp() {
         <span className="overlay__mode">编辑</span>
       </header>}
       <div className="overlay__status">{status}</div>
-      {windowError && <div className="overlay__error" role="alert">{windowError}</div>}
+      {(windowError || error) && <div className="overlay__error" role="alert">{windowError || error}</div>}
       {!locked && <div
         className="overlay__resize"
         title="调整窗口大小"
