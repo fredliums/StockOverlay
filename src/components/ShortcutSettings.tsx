@@ -96,7 +96,12 @@ export function ShortcutSettings({
         aria-label={`录制${label}快捷键`} aria-pressed={recording === action}
         onClick={() => { recordingRef.current = action; setRecording(action); setMessage('请按组合键；按 Esc 取消。'); }}
         onKeyDown={(event) => capture(event, action)}
-        onBlur={() => { if (recordingRef.current === action) { recordingRef.current = null; setRecording(null); } }}
+        onBlur={(event) => {
+          if (event.relatedTarget && recordingRef.current === action) {
+            recordingRef.current = null;
+            setRecording(null);
+          }
+        }}
       >{recording === action ? '请按组合键…' : key}</button>
       <span className="settings-form__hint">{registered ? '已注册' : '未注册'}</span>
     </div>;
