@@ -1,0 +1,15 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+*.log
+.npm-cache/
+.cargo/
+.rustup/
+.tools/
+
+# Local agent planning and scratch documents
+agents/*任务清单*.md
+agents/*临时*.md
+agents/*草稿*.md
+agents/*.tmp
