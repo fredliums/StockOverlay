@@ -1,6 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { LogicalSize } from '@tauri-apps/api/dpi';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState } from 'react';
 import type { AppConfig } from './types/config';
@@ -70,18 +69,6 @@ function OverlayApp() {
       active = false;
       stopMode?.();
       stopError?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    getCurrentWindow()
-      .setMinSize(new LogicalSize(240, 80))
-      .catch((reason: unknown) => {
-        if (active) setWindowError(`窗口最小尺寸设置失败：${errorMessage(reason)}`);
-      });
-    return () => {
-      active = false;
     };
   }, []);
 

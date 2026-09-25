@@ -8,6 +8,7 @@ pub mod stock_index;
 pub mod tencent;
 mod tray;
 mod window_control;
+mod window_placement;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -23,6 +24,9 @@ pub fn run() {
             let provider = provider::TencentQuoteProvider::new()?;
             let service = Arc::new(service::QuoteService::new(provider, Arc::clone(&state)));
             app.manage(state);
+            if let Err(error) = window_placement::install(app) {
+                eprintln!("could not restore window placement: {error}");
+            }
             window_control::install(app);
             if let Err(error) = shortcuts::install(app) {
                 eprintln!("could not initialize shortcuts: {error}");
@@ -33,11 +37,22 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if window.label() == "main" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    if let Err(error) = window.hide() {
-                        eprintln!("could not hide the main window: {error}");
+                match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        if let Err(error) = window.hide() {
+                            eprintln!("could not hide the main window: {error}");
+                        }
                     }
+                    tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) => {
+                        window_placement::schedule_save(window.app_handle());
+                    }
+                    tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                        if let Err(error) = window_placement::ensure_visible(window.app_handle()) {
+                            eprintln!("could not adapt to display scale change: {error}");
+                        }
+                    }
+                    _ => {}
                 }
             }
         })

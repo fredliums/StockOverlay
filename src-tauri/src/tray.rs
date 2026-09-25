@@ -30,6 +30,9 @@ pub fn install(app: &mut App) -> tauri::Result<()> {
                 LOCK => crate::window_control::toggle_lock(app).map(|_| ()),
                 SETTINGS => open_settings(app).map_err(|error| error.to_string()),
                 EXIT => {
+                    if let Err(error) = crate::window_placement::save_current(app) {
+                        eprintln!("could not save final window placement: {error}");
+                    }
                     crate::shortcuts::unregister_all(app);
                     app.exit(0);
                     Ok(())
@@ -70,6 +73,8 @@ pub(crate) fn toggle_main_visibility(app: &AppHandle) -> tauri::Result<()> {
         if window.is_visible()? {
             window.hide()
         } else {
+            crate::window_placement::ensure_visible(app)
+                .map_err(|error| tauri::Error::Anyhow(std::io::Error::other(error).into()))?;
             window.show()?;
             window.set_focus()
         }
