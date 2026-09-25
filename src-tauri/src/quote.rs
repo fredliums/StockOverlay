@@ -12,6 +12,20 @@ impl Symbol {
     pub fn key(&self) -> String {
         format!("{}:{}", self.market.as_str(), self.code)
     }
+
+    pub fn from_config_code(value: &str) -> Option<Self> {
+        let (prefix, code) = value.get(..2).zip(value.get(2..))?;
+        let market = match prefix {
+            "sh" => Market::SH,
+            "sz" => Market::SZ,
+            "bj" => Market::BJ,
+            _ => return None,
+        };
+        Some(Self {
+            market,
+            code: code.into(),
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]

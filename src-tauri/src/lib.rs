@@ -11,7 +11,9 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let state = Arc::new(commands::AppState::new(config::ConfigStore::open_default()?));
+            let state = Arc::new(commands::AppState::new(
+                config::ConfigStore::open_default()?
+            )?);
             let provider = provider::TencentQuoteProvider::new()?;
             let service = Arc::new(service::QuoteService::new(provider, Arc::clone(&state)));
             app.manage(state);

@@ -1,12 +1,9 @@
 use crate::{
     config::{AppConfig, ConfigStore},
-    quote::QuoteSnapshot,
+    quote::{QuoteSnapshot, QuoteState, QuoteStatus, Symbol},
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 use tauri::{State, WebviewWindow};
 
 pub struct AppState {
@@ -15,15 +12,31 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(config: ConfigStore) -> Self {
-        Self {
+    pub fn new(config: ConfigStore) -> Result<Self, crate::config::ConfigError> {
+        let statuses = config
+            .get()?
+            .stocks
+            .iter()
+            .filter_map(|stock| Symbol::from_config_code(stock))
+            .map(|symbol| {
+                (
+                    symbol.key(),
+                    QuoteStatus {
+                        state: QuoteState::Loading,
+                        last_success_at: None,
+                        message: None,
+                    },
+                )
+            })
+            .collect();
+        Ok(Self {
             config,
             snapshot: Mutex::new(QuoteSnapshot {
                 revision: 0,
                 quotes: Vec::new(),
-                statuses: HashMap::new(),
+                statuses,
             }),
-        }
+        })
     }
 }
 
