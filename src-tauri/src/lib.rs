@@ -26,7 +26,10 @@ pub fn run() {
             commands::load_config,
             commands::save_config,
             commands::get_quote_snapshot,
-            commands::search_stocks
+            commands::search_stocks,
+            commands::add_stock,
+            commands::remove_stock,
+            commands::reorder_stocks
         ])
         .run(tauri::generate_context!())
         .expect("failed to run StockOverlay");

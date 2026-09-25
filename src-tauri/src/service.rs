@@ -38,6 +38,7 @@ pub struct QuoteService<P: QuoteProvider> {
     provider: P,
     state: Arc<AppState>,
     refresh_active: AtomicBool,
+    refresh_requested: AtomicBool,
     runtime: Mutex<Runtime>,
 }
 
@@ -80,8 +81,13 @@ impl<P: QuoteProvider> QuoteService<P> {
             provider,
             state,
             refresh_active: AtomicBool::new(false),
+            refresh_requested: AtomicBool::new(false),
             runtime: Mutex::new(Runtime::default()),
         }
+    }
+
+    pub fn request_refresh(&self) {
+        self.refresh_requested.store(true, Ordering::Release);
     }
 
     /// Returns `None` when the previous round is still running.
@@ -130,19 +136,19 @@ impl<P: QuoteProvider> QuoteService<P> {
                 }
             }
         };
-        let current = self.state.config.get()?;
         let mut runtime = self
             .runtime
             .lock()
             .map_err(|_| ServiceError::RuntimeUnavailable)?;
-        let changed_during_request = config.stocks != current.stocks;
-        let finish_changed = runtime.sync_subscriptions(&current.stocks);
-        let reset_invalid = subscriptions_changed || finish_changed;
         let mut snapshot = self
             .state
             .snapshot
             .lock()
             .map_err(|_| ServiceError::SnapshotUnavailable)?;
+        let current = self.state.config.get()?;
+        let changed_during_request = config.stocks != current.stocks;
+        let finish_changed = runtime.sync_subscriptions(&current.stocks);
+        let reset_invalid = subscriptions_changed || finish_changed;
         let next_revision = snapshot
             .revision
             .checked_add(1)
@@ -257,7 +263,8 @@ impl<P: QuoteProvider> QuoteService<P> {
             loop {
                 timer.tick().await;
                 let now = Instant::now();
-                if now < next_due {
+                let requested = self.refresh_requested.load(Ordering::Acquire);
+                if now < next_due && !requested {
                     continue;
                 }
                 let Ok(config) = self.state.config.get() else {
@@ -268,6 +275,7 @@ impl<P: QuoteProvider> QuoteService<P> {
                 if self.refresh_active.load(Ordering::Acquire) {
                     continue;
                 }
+                self.refresh_requested.store(false, Ordering::Release);
                 let service = Arc::clone(&self);
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -654,6 +662,7 @@ mod tests {
         entered: Notify,
         release: Notify,
         calls: AtomicU64,
+        result: QuoteBatchResult,
     }
 
     impl QuoteProvider for SlowProvider {
@@ -661,7 +670,7 @@ mod tests {
             self.calls.fetch_add(1, Ordering::Relaxed);
             self.entered.notify_one();
             self.release.notified().await;
-            Ok(QuoteBatchResult::default())
+            Ok(self.result.clone())
         }
     }
 
@@ -678,6 +687,7 @@ mod tests {
                 entered: Notify::new(),
                 release: Notify::new(),
                 calls: AtomicU64::new(0),
+                result: QuoteBatchResult::default(),
             },
             state,
         ));
@@ -688,6 +698,36 @@ mod tests {
         assert_eq!(service.provider.calls.load(Ordering::Relaxed), 1);
         service.provider.release.notify_one();
         assert_eq!(first.await.unwrap().unwrap().unwrap().revision, 1);
+    }
+
+    #[tokio::test]
+    async fn removal_during_an_inflight_request_does_not_restore_the_stock() {
+        let directory = TestDirectory::new();
+        let state = state(&directory);
+        state
+            .config
+            .update(|config| config.stocks.push("sh600519".into()))
+            .unwrap();
+        let service = Arc::new(QuoteService::new(
+            SlowProvider {
+                entered: Notify::new(),
+                release: Notify::new(),
+                calls: AtomicU64::new(0),
+                result: QuoteBatchResult {
+                    quotes: vec![quote(Market::SH, "600519")],
+                    failures: Vec::new(),
+                },
+            },
+            Arc::clone(&state),
+        ));
+        let pending = Arc::clone(&service);
+        let refresh = tokio::spawn(async move { pending.refresh_once().await });
+        service.provider.entered.notified().await;
+        state.config.update(|config| config.stocks.clear()).unwrap();
+        service.provider.release.notify_one();
+        let snapshot = refresh.await.unwrap().unwrap().unwrap();
+        assert!(snapshot.quotes.is_empty());
+        assert!(snapshot.statuses.is_empty());
     }
 
     #[test]

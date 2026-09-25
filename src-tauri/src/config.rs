@@ -285,9 +285,19 @@ impl ConfigStore {
     }
 
     pub fn update(&self, apply: impl FnOnce(&mut AppConfig)) -> Result<AppConfig, ConfigError> {
+        self.update_checked(|config| {
+            apply(config);
+            Ok(())
+        })
+    }
+
+    pub fn update_checked(
+        &self,
+        apply: impl FnOnce(&mut AppConfig) -> Result<(), ConfigError>,
+    ) -> Result<AppConfig, ConfigError> {
         let mut current = self.current.lock().map_err(|_| ConfigError::LockPoisoned)?;
         let mut next = current.clone();
-        apply(&mut next);
+        apply(&mut next)?;
         next.validate()?;
         write_atomic(&self.path, &next)?;
         *current = next.clone();

@@ -1,15 +1,21 @@
 use crate::{
-    config::{AppConfig, ConfigStore},
+    config::{AppConfig, ConfigError, ConfigStore},
+    provider::TencentQuoteProvider,
     quote::{QuoteSnapshot, QuoteState, QuoteStatus, Symbol},
+    service::{QuoteService, QUOTE_UPDATE_EVENT},
     stock_index::{self, StockEntry},
 };
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
-use tauri::{State, WebviewWindow};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+};
+use tauri::{Emitter, State, WebviewWindow};
 
 pub struct AppState {
     pub(crate) config: ConfigStore,
     pub(crate) snapshot: Mutex<QuoteSnapshot>,
+    watchlist_lock: Mutex<()>,
 }
 
 impl AppState {
@@ -37,6 +43,7 @@ impl AppState {
                 quotes: Vec::new(),
                 statuses,
             }),
+            watchlist_lock: Mutex::new(()),
         })
     }
 }
@@ -219,9 +226,322 @@ pub fn search_stocks(
     Ok(stock_index::search(&query))
 }
 
+fn add_stock_to_state(
+    state: &AppState,
+    code: &str,
+) -> Result<(AppConfig, QuoteSnapshot), CommandError> {
+    let _watchlist_guard = state
+        .watchlist_lock
+        .lock()
+        .map_err(|_| CommandError::new("stock_state", "Watchlist is unavailable."))?;
+    if stock_index::find_active(code).is_none() {
+        let former = code.strip_prefix("bj").unwrap_or(code);
+        if let Some(stock) = stock_index::search(former)
+            .into_iter()
+            .find(|stock| stock.legacy_code.as_deref() == Some(former))
+        {
+            return Err(CommandError::new(
+                "legacy_stock_code",
+                format!(
+                    "Old BSE code {former}; use {} ({}) instead.",
+                    stock.subscription_code(),
+                    stock.name
+                ),
+            ));
+        }
+        return Err(CommandError::new(
+            "invalid_stock",
+            format!("Unknown or invalid stock code {code}."),
+        ));
+    }
+    let config = state
+        .config
+        .update_checked(|config| {
+            if config.stocks.iter().any(|stock| stock == code) {
+                return Err(ConfigError::Invalid(format!(
+                    "stock {code} is already selected"
+                )));
+            }
+            config.stocks.push(code.into());
+            Ok(())
+        })
+        .map_err(|error| CommandError::new("stock_add", error.to_string()))?;
+    let snapshot = sync_watchlist_snapshot(state, &config.stocks)?;
+    Ok((config, snapshot))
+}
+
+fn remove_stock_from_state(
+    state: &AppState,
+    code: &str,
+) -> Result<(AppConfig, QuoteSnapshot), CommandError> {
+    let _watchlist_guard = state
+        .watchlist_lock
+        .lock()
+        .map_err(|_| CommandError::new("stock_state", "Watchlist is unavailable."))?;
+    let config = state
+        .config
+        .update_checked(|config| {
+            let Some(index) = config.stocks.iter().position(|stock| stock == code) else {
+                return Err(ConfigError::Invalid(format!(
+                    "stock {code} is not selected"
+                )));
+            };
+            config.stocks.remove(index);
+            Ok(())
+        })
+        .map_err(|error| CommandError::new("stock_remove", error.to_string()))?;
+    let snapshot = sync_watchlist_snapshot(state, &config.stocks)?;
+    Ok((config, snapshot))
+}
+
+fn reorder_stocks_in_state(
+    state: &AppState,
+    codes: Vec<String>,
+) -> Result<(AppConfig, QuoteSnapshot), CommandError> {
+    let _watchlist_guard = state
+        .watchlist_lock
+        .lock()
+        .map_err(|_| CommandError::new("stock_state", "Watchlist is unavailable."))?;
+    let config = state
+        .config
+        .update_checked(|config| {
+            let selected: HashSet<_> = config.stocks.iter().collect();
+            let requested: HashSet<_> = codes.iter().collect();
+            if codes.len() != config.stocks.len() || selected != requested {
+                return Err(ConfigError::Invalid(
+                    "stock order must contain each selected stock exactly once".into(),
+                ));
+            }
+            config.stocks = codes;
+            Ok(())
+        })
+        .map_err(|error| CommandError::new("stock_reorder", error.to_string()))?;
+    let snapshot = sync_watchlist_snapshot(state, &config.stocks)?;
+    Ok((config, snapshot))
+}
+
+fn sync_watchlist_snapshot(
+    state: &AppState,
+    stocks: &[String],
+) -> Result<QuoteSnapshot, CommandError> {
+    let mut snapshot = state
+        .snapshot
+        .lock()
+        .map_err(|_| CommandError::new("quote_state", "Quote state is unavailable."))?;
+    let next = snapshot
+        .revision
+        .checked_add(1)
+        .ok_or_else(|| CommandError::new("quote_revision", "Quote revision is exhausted."))?;
+    let mut quotes: HashMap<_, _> = snapshot
+        .quotes
+        .drain(..)
+        .map(|quote| (quote.key(), quote))
+        .collect();
+    let keys: Vec<_> = stocks
+        .iter()
+        .filter_map(|stock| Symbol::from_config_code(stock))
+        .map(|symbol| symbol.key())
+        .collect();
+    let selected: HashSet<_> = keys.iter().cloned().collect();
+    snapshot.quotes = keys.iter().filter_map(|key| quotes.remove(key)).collect();
+    snapshot.statuses.retain(|key, _| selected.contains(key));
+    for key in keys {
+        let status = snapshot.statuses.entry(key).or_insert(QuoteStatus {
+            state: QuoteState::Loading,
+            last_success_at: None,
+            message: None,
+        });
+        if status.state == QuoteState::Invalid {
+            status.state = QuoteState::Loading;
+            status.message = None;
+        }
+    }
+    snapshot.revision = next;
+    Ok(snapshot.clone())
+}
+
+fn publish_watchlist_change(
+    window: &WebviewWindow,
+    service: &QuoteService<TencentQuoteProvider>,
+    snapshot: QuoteSnapshot,
+) {
+    if let Err(error) = window.emit(QUOTE_UPDATE_EVENT, snapshot) {
+        eprintln!("could not emit watchlist update: {error}");
+    }
+    service.request_refresh();
+}
+
+#[tauri::command]
+pub fn add_stock(
+    window: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    service: State<'_, Arc<QuoteService<TencentQuoteProvider>>>,
+    code: String,
+) -> Result<AppConfig, CommandError> {
+    require_app_window(&window)?;
+    let (config, snapshot) = add_stock_to_state(&state, &code)?;
+    publish_watchlist_change(&window, &service, snapshot);
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn remove_stock(
+    window: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    service: State<'_, Arc<QuoteService<TencentQuoteProvider>>>,
+    code: String,
+) -> Result<AppConfig, CommandError> {
+    require_app_window(&window)?;
+    let (config, snapshot) = remove_stock_from_state(&state, &code)?;
+    publish_watchlist_change(&window, &service, snapshot);
+    Ok(config)
+}
+
+#[tauri::command]
+pub fn reorder_stocks(
+    window: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+    service: State<'_, Arc<QuoteService<TencentQuoteProvider>>>,
+    codes: Vec<String>,
+) -> Result<AppConfig, CommandError> {
+    require_app_window(&window)?;
+    let (config, snapshot) = reorder_stocks_in_state(&state, codes)?;
+    publish_watchlist_change(&window, &service, snapshot);
+    Ok(config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tencent::parse_response;
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let number = TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "StockOverlay-watchlist-test-{}-{number}",
+                std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+
+        fn path(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn add_rejects_duplicate_unknown_and_former_beijing_codes() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("config.json");
+        let state = AppState::new(ConfigStore::open(path.clone()).unwrap()).unwrap();
+        let (config, snapshot) = add_stock_to_state(&state, "sh600519").unwrap();
+        assert_eq!(config.stocks, ["sh600519"]);
+        assert_eq!(snapshot.statuses["SH:600519"].state, QuoteState::Loading);
+        assert_eq!(
+            add_stock_to_state(&state, "sh600519").unwrap_err().code,
+            "stock_add"
+        );
+        assert_eq!(
+            add_stock_to_state(&state, "sh999999").unwrap_err().code,
+            "invalid_stock"
+        );
+        let old = add_stock_to_state(&state, "bj834021").unwrap_err();
+        assert_eq!(old.code, "legacy_stock_code");
+        assert!(old.message.contains("bj920021"));
+        assert_eq!(state.config.get().unwrap().stocks, ["sh600519"]);
+        assert_eq!(
+            ConfigStore::open(path).unwrap().get().unwrap().stocks,
+            ["sh600519"]
+        );
+    }
+
+    #[test]
+    fn reorder_and_remove_persist_and_prune_cached_quotes() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("config.json");
+        let state = AppState::new(ConfigStore::open(path.clone()).unwrap()).unwrap();
+        add_stock_to_state(&state, "sh600519").unwrap();
+        add_stock_to_state(&state, "sz000001").unwrap();
+        add_stock_to_state(&state, "bj920021").unwrap();
+        let sh = parse_response(
+            include_bytes!("../tests/fixtures/tencent/sh600519.gbk"),
+            &[Symbol::from_config_code("sh600519").unwrap()],
+        )
+        .quotes
+        .remove(0);
+        let sz = parse_response(
+            include_bytes!("../tests/fixtures/tencent/sz000001.gbk"),
+            &[Symbol::from_config_code("sz000001").unwrap()],
+        )
+        .quotes
+        .remove(0);
+        state.snapshot.lock().unwrap().quotes = vec![sh, sz];
+        let order = vec!["sz000001".into(), "sh600519".into(), "bj920021".into()];
+        let (config, snapshot) = reorder_stocks_in_state(&state, order.clone()).unwrap();
+        assert_eq!(config.stocks, order);
+        assert_eq!(
+            snapshot
+                .quotes
+                .iter()
+                .map(|quote| quote.key())
+                .collect::<Vec<_>>(),
+            ["SZ:000001", "SH:600519"]
+        );
+        assert!(reorder_stocks_in_state(
+            &state,
+            vec!["sz000001".into(), "sz000001".into(), "bj920021".into()]
+        )
+        .is_err());
+        let (config, snapshot) = remove_stock_from_state(&state, "sh600519").unwrap();
+        assert_eq!(config.stocks, ["sz000001", "bj920021"]);
+        assert_eq!(snapshot.quotes.len(), 1);
+        assert_eq!(snapshot.quotes[0].key(), "SZ:000001");
+        assert!(!snapshot.statuses.contains_key("SH:600519"));
+        assert!(remove_stock_from_state(&state, "sh600519").is_err());
+        assert_eq!(
+            ConfigStore::open(path).unwrap().get().unwrap().stocks,
+            ["sz000001", "bj920021"]
+        );
+    }
+
+    #[test]
+    fn concurrent_adds_keep_the_persisted_watchlist_and_snapshot_aligned() {
+        let directory = TestDirectory::new();
+        let path = directory.path().join("config.json");
+        let state = Arc::new(AppState::new(ConfigStore::open(path.clone()).unwrap()).unwrap());
+        std::thread::scope(|scope| {
+            for code in ["sh600519", "sz000001"] {
+                let state = Arc::clone(&state);
+                scope.spawn(move || add_stock_to_state(&state, code).unwrap());
+            }
+        });
+        let config = state.config.get().unwrap();
+        let snapshot = state.snapshot.lock().unwrap();
+        assert_eq!(config.stocks.len(), 2);
+        assert_eq!(snapshot.statuses.len(), 2);
+        assert_eq!(snapshot.revision, 2);
+        assert_eq!(
+            ConfigStore::open(path).unwrap().get().unwrap().stocks,
+            config.stocks
+        );
+    }
 
     #[test]
     fn separate_patches_preserve_previous_changes() {
