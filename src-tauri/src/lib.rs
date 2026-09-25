@@ -64,6 +64,7 @@ pub fn run() {
             commands::get_shortcut_status,
             commands::change_shortcut,
             commands::search_stocks,
+            commands::get_watchlist_entries,
             commands::add_stock,
             commands::remove_stock,
             commands::reorder_stocks

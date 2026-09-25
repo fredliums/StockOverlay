@@ -2,6 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { appStore } from './appStore';
+import { StockList } from './components/StockList';
 
 function errorMessage(error: unknown): string {
   if (typeof error === 'object' && error !== null && 'message' in error) {
@@ -46,7 +47,7 @@ function SettingsShell() {
 }
 
 function OverlayApp() {
-  const { config, snapshot, locked, error } = useAppState();
+  const { config, snapshot, watchlist, locked, error } = useAppState();
   const [windowError, setWindowError] = useState<string | null>(null);
 
   const startDrag = () => {
@@ -82,6 +83,7 @@ function OverlayApp() {
       </header>}
       <div className="overlay__status">{status}</div>
       {(windowError || error) && <div className="overlay__error" role="alert">{windowError || error}</div>}
+      {config && <StockList config={config} snapshot={snapshot} watchlist={watchlist} />}
       {!locked && <div
         className="overlay__resize"
         title="调整窗口大小"

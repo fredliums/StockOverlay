@@ -265,6 +265,23 @@ pub fn search_stocks(
     Ok(stock_index::search(&query))
 }
 
+#[tauri::command]
+pub fn get_watchlist_entries(
+    window: WebviewWindow,
+    state: State<'_, Arc<AppState>>,
+) -> Result<Vec<StockEntry>, CommandError> {
+    require_app_window(&window)?;
+    let config = state
+        .config
+        .get()
+        .map_err(|error| CommandError::new("config_read", error.to_string()))?;
+    Ok(config
+        .stocks
+        .iter()
+        .filter_map(|code| stock_index::find_active(code).cloned())
+        .collect())
+}
+
 fn add_stock_to_state(
     state: &AppState,
     code: &str,

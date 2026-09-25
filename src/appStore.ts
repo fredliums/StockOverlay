@@ -8,6 +8,7 @@ import type { StockEntry } from './types/stock';
 export type AppState = {
   config: AppConfig | null;
   snapshot: QuoteSnapshot | null;
+  watchlist: StockEntry[];
   locked: boolean;
   visible: boolean;
   error: string | null;
@@ -24,6 +25,7 @@ class AppStore {
   private state: AppState = {
     config: null,
     snapshot: null,
+    watchlist: [],
     locked: false,
     visible: document.visibilityState === 'visible',
     error: null,
@@ -34,6 +36,7 @@ class AppStore {
   private stops: UnlistenFn[] = [];
   private configRead = 0;
   private modeRead = 0;
+  private watchlistRead = 0;
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -112,7 +115,10 @@ class AppStore {
     const read = ++this.configRead;
     try {
       const config = await invoke<AppConfig>('load_config');
-      if (read === this.configRead && this.connections > 0) this.update({ config });
+      if (read === this.configRead && this.connections > 0) {
+        this.update({ config });
+        void this.refreshWatchlist();
+      }
     } catch (error) {
       if (read === this.configRead && this.connections > 0) {
         this.update({ error: errorMessage(error) });
@@ -129,6 +135,20 @@ class AppStore {
       }
     } catch (error) {
       if (this.connections > 0) this.update({ error: errorMessage(error) });
+    }
+  }
+
+  async refreshWatchlist() {
+    const read = ++this.watchlistRead;
+    try {
+      const watchlist = await invoke<StockEntry[]>('get_watchlist_entries');
+      if (read === this.watchlistRead && this.connections > 0) {
+        this.update({ watchlist });
+      }
+    } catch (error) {
+      if (read === this.watchlistRead && this.connections > 0) {
+        this.update({ error: errorMessage(error) });
+      }
     }
   }
 
