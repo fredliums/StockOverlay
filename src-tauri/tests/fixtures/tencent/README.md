@@ -4,6 +4,9 @@ Captured on 2026-09-25 at approximately 14:09 China Standard Time from
 `https://qt.gtimg.cn/q=` with HTTPS GET and `User-Agent: StockOverlay/0.1`.
 The requests sent no API key, Cookie, or Referer. Each request returned HTTP 200.
 Files preserve the original response bytes in GBK; decoding them as strict UTF-8 fails.
+The Rust HTTP probe can be repeated with
+`cargo run --manifest-path src-tauri/Cargo.toml --example probe_tencent`.
+It fetched the same five queries successfully on the capture date.
 
 | File | Query | Records | Bytes |
 | --- | --- | ---: | ---: |
