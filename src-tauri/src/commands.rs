@@ -3,12 +3,15 @@ use crate::{
     quote::QuoteSnapshot,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tauri::{State, WebviewWindow};
 
 pub struct AppState {
-    config: ConfigStore,
-    snapshot: Mutex<QuoteSnapshot>,
+    pub(crate) config: ConfigStore,
+    pub(crate) snapshot: Mutex<QuoteSnapshot>,
 }
 
 impl AppState {
@@ -157,7 +160,7 @@ impl DisplayPatch {
 #[tauri::command]
 pub fn load_config(
     window: WebviewWindow,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<AppConfig, CommandError> {
     require_app_window(&window)?;
     state
@@ -170,7 +173,7 @@ pub fn load_config(
 #[tauri::command]
 pub fn save_config(
     window: WebviewWindow,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
     patch: ConfigPatch,
 ) -> Result<AppConfig, CommandError> {
     require_app_window(&window)?;
@@ -183,7 +186,7 @@ pub fn save_config(
 #[tauri::command]
 pub fn get_quote_snapshot(
     window: WebviewWindow,
-    state: State<'_, AppState>,
+    state: State<'_, Arc<AppState>>,
 ) -> Result<QuoteSnapshot, CommandError> {
     require_app_window(&window)?;
     state
