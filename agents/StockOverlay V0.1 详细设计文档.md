@@ -547,20 +547,15 @@ locked
 
 # 15. 编辑状态
 
-允许：
+悬浮窗仅显示自选股行情，不显示标题、编辑状态、设置按钮或其他控制栏。编辑状态允许：
 
 ```text
-拖动
-Resize
-点击
-打开设置
-修改股票
-调整股票顺序
-修改显示内容
-锁定窗口
+在悬浮窗内容区域按住鼠标左键拖动窗口
+在窗口边缘按住鼠标左键调整大小
+滚动查看超出窗口的行情
 ```
 
-可显示轻量 Toolbar。
+自选股、显示、外观、行情和快捷键均在设置窗口修改；通过托盘打开设置。锁定 / 解锁通过全局快捷键或托盘操作。
 
 ---
 
@@ -569,7 +564,6 @@ Resize
 进入锁定：
 
 ```text
-隐藏 Toolbar
 禁止 Resize
 禁止拖动
 开启鼠标穿透
@@ -1101,8 +1095,7 @@ src/
 │   ├── StockCard.tsx
 │   ├── QuoteFields.tsx
 │   ├── CompactLevel1.tsx
-│   ├── OrderBook.tsx
-│   └── OverlayToolbar.tsx
+│   └── OrderBook.tsx
 │
 ├── settings/
 │   ├── SettingsWindow.tsx
@@ -1351,6 +1344,7 @@ StockOverlay-Setup.exe
 - 始终置顶
 - 可拖动
 - 可 Resize
+- 悬浮窗不显示控制栏；编辑态从内容区域拖动、从边缘调整大小
 - 位置和尺寸持久化
 
 ## 锁定
