@@ -1,0 +1,236 @@
+use crate::quote::{Quote, QuoteBatchResult, QuoteFailure, QuoteFailureKind, Symbol};
+use chrono::{FixedOffset, NaiveDateTime, TimeZone};
+use encoding_rs::GBK;
+use std::collections::HashMap;
+
+/// Decode one Tencent response and retain a result for every requested symbol.
+pub fn parse_response(bytes: &[u8], requested: &[Symbol]) -> QuoteBatchResult {
+    let mut result = QuoteBatchResult::default();
+    if requested.is_empty() {
+        return result;
+    }
+    let (decoded, _, had_errors) = GBK.decode(bytes);
+    if had_errors {
+        return fail_all(requested, QuoteFailureKind::Parse);
+    }
+    let records = split_records(&decoded);
+    let invalid_marker = records.contains_key("pv_none_match");
+    for symbol in requested {
+        let key = format!(
+            "{}{}",
+            symbol.market.as_str().to_ascii_lowercase(),
+            symbol.code
+        );
+        let outcome = match records.get(&key) {
+            Some(payload) => parse_quote(symbol, payload),
+            None if invalid_marker && requested.len() == 1 => Err(QuoteFailureKind::InvalidSymbol),
+            None => Err(QuoteFailureKind::MissingRecord),
+        };
+        match outcome {
+            Ok(quote) => result.quotes.push(quote),
+            Err(kind) => result.failures.push(QuoteFailure {
+                symbol: symbol.clone(),
+                kind,
+            }),
+        }
+    }
+    result
+}
+
+fn fail_all(requested: &[Symbol], kind: QuoteFailureKind) -> QuoteBatchResult {
+    QuoteBatchResult {
+        quotes: Vec::new(),
+        failures: requested
+            .iter()
+            .cloned()
+            .map(|symbol| QuoteFailure { symbol, kind })
+            .collect(),
+    }
+}
+
+fn split_records(decoded: &str) -> HashMap<String, &str> {
+    decoded
+        .split(';')
+        .filter_map(|record| {
+            let record = record.trim();
+            let (key, quoted_payload) = record.strip_prefix("v_")?.split_once('=')?;
+            let payload = quoted_payload.strip_prefix('"')?.strip_suffix('"')?;
+            if key.is_empty() {
+                return None;
+            }
+            Some((key.to_string(), payload))
+        })
+        .collect()
+}
+
+fn parse_quote(symbol: &Symbol, payload: &str) -> Result<Quote, QuoteFailureKind> {
+    let fields: Vec<_> = payload.split('~').collect();
+    let name = field(&fields, 1).ok_or(QuoteFailureKind::Parse)?;
+    let response_code = field(&fields, 2).ok_or(QuoteFailureKind::Parse)?;
+    if response_code != symbol.code {
+        return Err(QuoteFailureKind::Parse);
+    }
+    let price = number(&fields, 3).filter(|value| *value > 0.0);
+    if price.is_none() {
+        return Err(QuoteFailureKind::Parse);
+    }
+    let previous_close = number(&fields, 4).filter(|value| *value > 0.0);
+    let turnover_wan = number(&fields, 57)
+        .filter(|value| *value >= 0.0)
+        .or_else(|| number(&fields, 37).filter(|value| *value >= 0.0));
+    let turnover = turnover_wan.and_then(|value| {
+        let yuan = value * 10_000.0;
+        yuan.is_finite().then_some(yuan)
+    });
+
+    Ok(Quote {
+        symbol: symbol.code.clone(),
+        market: symbol.market,
+        name: name.into(),
+        price,
+        previous_close,
+        change: number(&fields, 31),
+        change_percent: number(&fields, 32),
+        high: number(&fields, 33).filter(|value| *value > 0.0),
+        low: number(&fields, 34).filter(|value| *value > 0.0),
+        turnover,
+        turnover_rate: number(&fields, 38),
+        pe: number(&fields, 39),
+        volume_ratio: number(&fields, 49),
+        order_ratio: None,
+        bid_levels: Vec::new(),
+        ask_levels: Vec::new(),
+        timestamp: field(&fields, 30).and_then(parse_beijing_time),
+    })
+}
+
+fn field<'a>(fields: &'a [&str], index: usize) -> Option<&'a str> {
+    fields
+        .get(index)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+}
+
+fn number(fields: &[&str], index: usize) -> Option<f64> {
+    field(fields, index)
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| value.is_finite())
+}
+
+fn parse_beijing_time(value: &str) -> Option<i64> {
+    let local = NaiveDateTime::parse_from_str(value, "%Y%m%d%H%M%S").ok()?;
+    let beijing = FixedOffset::east_opt(8 * 60 * 60)?;
+    beijing
+        .from_local_datetime(&local)
+        .single()
+        .map(|time| time.timestamp_millis())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::quote::Market;
+
+    fn symbol(market: Market, code: &str) -> Symbol {
+        Symbol {
+            market,
+            code: code.into(),
+        }
+    }
+
+    #[test]
+    fn decodes_three_markets_from_captured_gbk_bytes() {
+        for (market, code, bytes, expected_name, expected_turnover) in [
+            (
+                Market::SH,
+                "600519",
+                &include_bytes!("../tests/fixtures/tencent/sh600519.gbk")[..],
+                "贵州茅台",
+                3_867_310_920.0,
+            ),
+            (
+                Market::SZ,
+                "000001",
+                &include_bytes!("../tests/fixtures/tencent/sz000001.gbk")[..],
+                "平安银行",
+                1_186_736_896.0,
+            ),
+            (
+                Market::BJ,
+                "920021",
+                &include_bytes!("../tests/fixtures/tencent/bj920021.gbk")[..],
+                "流金科技",
+                176_290_597.0,
+            ),
+        ] {
+            let result = parse_response(bytes, &[symbol(market, code)]);
+            assert!(result.failures.is_empty());
+            let quote = &result.quotes[0];
+            assert_eq!(quote.name, expected_name);
+            assert_eq!(quote.symbol, code);
+            assert_eq!(quote.market, market);
+            assert!((quote.turnover.unwrap() - expected_turnover).abs() < 0.001);
+            assert!(quote.timestamp.is_some());
+        }
+    }
+
+    #[test]
+    fn parses_batch_and_preserves_input_order() {
+        let requested = [symbol(Market::SZ, "000001"), symbol(Market::SH, "600519")];
+        let result = parse_response(
+            include_bytes!("../tests/fixtures/tencent/batch.gbk"),
+            &requested,
+        );
+        assert!(result.failures.is_empty());
+        assert_eq!(result.quotes.len(), 2);
+        assert_eq!(result.quotes[0].symbol, "000001");
+        assert_eq!(result.quotes[1].symbol, "600519");
+    }
+
+    #[test]
+    fn rejects_invalid_code_mismatched_key_and_bad_core_price() {
+        let requested = symbol(Market::SH, "600519");
+        let invalid = parse_response(
+            include_bytes!("../tests/fixtures/tencent/invalid.gbk"),
+            &[symbol(Market::SH, "000000")],
+        );
+        assert_eq!(invalid.failures[0].kind, QuoteFailureKind::InvalidSymbol);
+        assert_eq!(invalid.quotes.len(), 0);
+
+        let mismatch = parse_response(b"v_sz600519=\"1~Other~600519~10~9\";", &[requested.clone()]);
+        assert_eq!(mismatch.failures[0].kind, QuoteFailureKind::MissingRecord);
+        let bad_price = parse_response(b"v_sh600519=\"1~Other~600519~0~9\";", &[requested]);
+        assert_eq!(bad_price.failures[0].kind, QuoteFailureKind::Parse);
+    }
+
+    #[test]
+    fn missing_optional_fields_remain_null_and_turnover_falls_back() {
+        let response = b"v_sh600519=\"1~Sample~600519~10~9\";";
+        let quote = &parse_response(response, &[symbol(Market::SH, "600519")]).quotes[0];
+        assert_eq!(quote.high, None);
+        assert_eq!(quote.turnover, None);
+        assert_eq!(quote.timestamp, None);
+
+        let mut fields = vec![""; 38];
+        fields[1] = "Sample";
+        fields[2] = "600519";
+        fields[3] = "10";
+        fields[4] = "9";
+        fields[37] = "12.5";
+        let response = format!("v_sh600519=\"{}\";", fields.join("~"));
+        let quote = &parse_response(response.as_bytes(), &[symbol(Market::SH, "600519")]).quotes[0];
+        assert_eq!(quote.turnover, Some(125_000.0));
+    }
+
+    #[test]
+    fn rejects_malformed_gbk_and_invalid_calendar_time() {
+        let requested = symbol(Market::SH, "600519");
+        let invalid_gbk = parse_response(&[0xff], &[requested.clone()]);
+        assert_eq!(invalid_gbk.failures[0].kind, QuoteFailureKind::Parse);
+        assert_eq!(parse_beijing_time("20260230120000"), None);
+        assert_eq!(
+            parse_beijing_time("20260924161444"),
+            Some(1_790_237_684_000)
+        );
+    }
+}

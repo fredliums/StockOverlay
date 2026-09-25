@@ -1,6 +1,7 @@
 mod commands;
 pub mod config;
 pub mod quote;
+pub mod tencent;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
