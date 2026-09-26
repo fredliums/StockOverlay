@@ -65,8 +65,6 @@ function SettingsShell() {
         {config && tab === 'quotes' && <QuoteSettings config={config} />}
         {config && tab === 'shortcuts' && <ShortcutSettings config={config} status={shortcuts} onStatusChange={setShortcuts} />}
       </section>
-      {shortcuts?.lockError && <p role="alert">锁定快捷键不可用：{shortcuts.lockError}</p>}
-      {shortcuts?.visibilityError && <p role="alert">显示快捷键不可用：{shortcuts.visibilityError}</p>}
       {error && <p role="alert">{error}</p>}
     </main>
   );

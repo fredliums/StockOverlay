@@ -17,6 +17,12 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+function registrationMessage(key: string, error: string): string {
+  return /already registered/i.test(error)
+    ? `${key} 已被占用，请录制其他组合键。`
+    : `${key} 注册失败：${error}`;
+}
+
 export function ShortcutSettings({
   config,
   status,
@@ -61,7 +67,7 @@ export function ShortcutSettings({
       setMessage(`快捷键已保存并生效：${key}`);
     } catch (error) {
       await appStore.refreshConfig();
-      setMessage(`修改失败：${errorMessage(error)}`);
+      setMessage(`修改失败：${registrationMessage(key, errorMessage(error))}`);
     } finally {
       setSaving(false);
     }
@@ -110,7 +116,9 @@ export function ShortcutSettings({
     <h2>全局快捷键</h2>
     <p className="settings-form__hint">点击当前组合键，再按新的组合键即可保存；按 Esc 取消。修改失败时原快捷键保持可用。</p>
     {shortcutButton('toggleLock', '锁定 / 解锁', config.shortcuts.toggleLock, status?.lockRegistered)}
+    {status?.lockError && <p role="alert">锁定 / 解锁：{registrationMessage(config.shortcuts.toggleLock, status.lockError)}</p>}
     {shortcutButton('toggleVisibility', '显示 / 隐藏', config.shortcuts.toggleVisibility, status?.visibilityRegistered)}
+    {status?.visibilityError && <p role="alert">显示 / 隐藏：{registrationMessage(config.shortcuts.toggleVisibility, status.visibilityError)}</p>}
     {message && <p role="status">{message}</p>}
   </div>;
 }
