@@ -5,6 +5,8 @@ pub mod quote;
 mod service;
 mod shortcuts;
 pub mod stock_index;
+#[cfg(windows)]
+mod taskbar_layer;
 pub mod tencent;
 mod tray;
 mod window_control;
@@ -73,6 +75,10 @@ pub fn run() {
                         if let Err(error) = window_placement::ensure_visible(window.app_handle()) {
                             eprintln!("could not adapt to display scale change: {error}");
                         }
+                    }
+                    #[cfg(windows)]
+                    tauri::WindowEvent::Focused(false) => {
+                        taskbar_layer::restore_after_deactivation(window.clone());
                     }
                     _ => {}
                 }
