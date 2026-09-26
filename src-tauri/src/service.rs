@@ -360,7 +360,7 @@ fn refresh_interval(beijing: DateTime<FixedOffset>, configured: u32) -> Duration
     if market_open(beijing) {
         Duration::from_millis(u64::from(configured))
     } else {
-        OUTSIDE_MARKET_INTERVAL
+        Duration::from_millis(u64::from(configured)).max(OUTSIDE_MARKET_INTERVAL)
     }
 }
 

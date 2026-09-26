@@ -5,7 +5,7 @@ export interface AppConfig {
   shortcuts: ShortcutConfig;
   /** Exchange-prefixed codes such as `sh600519`. */
   stocks: string[];
-  refreshInterval: 1000 | 2000 | 3000 | 5000;
+  refreshInterval: 1000 | 3000 | 5000 | 30000 | 60000 | 1800000 | 3600000;
 }
 
 export interface WindowConfig {

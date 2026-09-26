@@ -32,7 +32,7 @@ impl Default for AppConfig {
             display: DisplayConfig::default(),
             shortcuts: ShortcutConfig::default(),
             stocks: Vec::new(),
-            refresh_interval: 2_000,
+            refresh_interval: 3_000,
         }
     }
 }
@@ -166,7 +166,9 @@ impl AppConfig {
         if ![0, 1, 3, 5].contains(&self.display.order_book_depth) {
             return Err(ConfigError::Invalid("unsupported order book depth".into()));
         }
-        if ![1_000, 2_000, 3_000, 5_000].contains(&self.refresh_interval) {
+        if ![1_000, 3_000, 5_000, 30_000, 60_000, 1_800_000, 3_600_000]
+            .contains(&self.refresh_interval)
+        {
             return Err(ConfigError::Invalid("unsupported refresh interval".into()));
         }
         let lock = shortcut_key(&self.shortcuts.toggle_lock)?;

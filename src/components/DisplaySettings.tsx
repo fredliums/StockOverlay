@@ -110,9 +110,12 @@ export function QuoteSettings({ config }: { config: AppConfig }) {
         void save({ refreshInterval: Number(event.target.value) as AppConfig['refreshInterval'] });
       }}>
         <option value={1000}>1 秒</option>
-        <option value={2000}>2 秒</option>
         <option value={3000}>3 秒</option>
         <option value={5000}>5 秒</option>
+        <option value={30000}>30 秒</option>
+        <option value={60000}>60 秒</option>
+        <option value={1800000}>30 分钟</option>
+        <option value={3600000}>60 分钟</option>
       </select>
     </label>
     {status && <p role="status">{status}</p>}
